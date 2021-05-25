@@ -1,0 +1,92 @@
+{{ range $server := .Servers }}
+    server {
+      {{ if $server.Name }}server_name {{ $server.Name }};{{ end }}
+
+      {{if $server.HTTPPort}}listen {{$server.HTTPPort}};
+      {{else if (not $server.HTTPSPort)}}listen 80;
+      {{end}}
+
+      {{ if $server.SSL -}}
+        {{ if and ($server.HTTPSPort) (not $server.MutualAuthPort) }}
+        listen {{ $server.HTTPSPort }} ssl;
+        ssl_certificate {{ $server.SSLCertificate }};
+        ssl_certificate_key {{ $server.SSLCertificateKey }};
+
+        {{ else if and ($server.HTTPSPort) ($server.MutualAuthPort) }}
+        listen {{ $server.HTTPSPort }} ssl;
+        ssl_certificate {{ $server.SSLCertificate }};
+        ssl_certificate_key {{ $server.SSLCertificateKey }};
+
+        {{ else if and ($server.MutualAuthPort) (not $server.HTTPSPort) }}
+        {{ if and (not $server.HTTPPort) (not (eq $server.MutualAuthPort "443")) }}
+        listen 443 ssl;
+        ssl_certificate {{ $server.SSLCertificate }};
+        ssl_certificate_key {{ $server.SSLCertificateKey }};
+        {{ end }}
+
+        {{ else if and (not $server.HTTPPort) (not $server.MutualAuthPort) }}
+        listen 443 ssl;
+        ssl_certificate {{ $server.SSLCertificate }};
+        ssl_certificate_key {{ $server.SSLCertificateKey }};
+        {{ end }}
+      {{- end }}
+
+    {{ template "frontend" $server }}
+    }
+
+    {{ if ($server.MutualAuthPort) -}}
+      {{ if not (eq ($server.MutualAuthPort) ($server.HTTPSPort)) }}
+        {{ if not (eq ($server.MutualAuthPort) ($server.HTTPPort)) }}
+          {{ if $server.SSL }}
+            server {
+              {{ if $server.Name }}server_name {{ $server.Name }};{{ end }}
+              listen {{ $server.MutualAuthPort }} ssl;
+              ssl_certificate {{ $server.SSLCertificate }};
+              ssl_certificate_key {{ $server.SSLCertificateKey }};
+              ssl_client_certificate {{ $server.SSLClientCertificate }};
+              ssl_verify_client on;
+              ssl_verify_depth 5;
+              {{ if $server.WatsonAuthLocation }}
+                if ($ssl_client_i_dn != "Issuer: C=US, ST=New York, O=International Business Machines Corporation, OU=Watson Group, CN=Watson Premium Service Account Intermediate CA") {
+                  return 403;
+                }
+              {{ end }}
+              {{ template "frontend" $server }}
+            }
+          {{ end }}
+        {{ end }}
+      {{ end }}
+    {{- end }}
+{{ end }}
+
+{{ define "frontend" }}
+    {{ $server := . }}
+    {{ if not $server.ServerTokens}}server_tokens off;{{end}}
+
+    {{ range $proxyHideHeader := $server.ProxyHideHeaders }}proxy_hide_header {{ $proxyHideHeader }};{{ end }}
+    {{ range $proxyPassHeader := $server.ProxyPassHeaders }}proxy_pass_header {{ $proxyPassHeader }};{{ end }}
+
+    {{ if $server.ServerSnippets }}{{ range $value := $server.ServerSnippets }}{{ $value }}{{ end }}{{ end }}
+
+    {{ if $server.RedirectToHTTPS }}
+      if ($http_x_forwarded_proto = 'http') {
+        return 301 https://$host$request_uri;
+      }
+      if ($scheme = http) {
+        return 301 https://$host$request_uri;
+      }
+    {{ end }}
+
+    location  / {
+      proxy_http_version 1.1;
+      proxy_set_header "x-global-transaction-id" $request_id;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Host $host;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-Proto {{ if $server.RedirectToHTTPS }}https{{ else }}$scheme{{ end }};
+      proxy_buffering on;
+      proxy_pass http://proxy_snort;
+    }
+{{ end }}

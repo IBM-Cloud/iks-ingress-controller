@@ -1,0 +1,13 @@
+apiVersion: v1
+data:
+  ingress-resource-creation-rate: 15s
+  ingress-resource-timeout: 5m
+  keep-alive: 8s
+  private-ports: 80;443
+  public-ports: 80;443
+  ssl-ciphers: HIGH:!aNULL:!MD5:!CAMELLIA:!AESCCM:!ECDH+CHACHA20
+  vts-status-zone-size: 10m
+kind: ConfigMap
+metadata:
+  name: ibm-cloud-provider-ingress-cm
+  namespace: kube-system

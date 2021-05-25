@@ -1,0 +1,69 @@
+{{ $cfg := . }}
+
+server {
+
+    listen 80 {{ if $cfg.IsDefaultServerConf }}default_server{{ end }} {{ if $cfg.ReusePort }}reuseport{{ end }} backlog={{ if $cfg.Backlog }}{{ $cfg.Backlog }}{{ else }}32768{{ end }};
+#    listen 443 ssl {{ if $cfg.IsDefaultServerConf }}default_server{{ end }} {{ if $cfg.ReusePort }}reuseport{{ end }} backlog={{ if $cfg.Backlog }}{{ $cfg.Backlog }}{{ else }}32768{{ end }};
+
+#    ssl_certificate /etc/nginx/ssl/default.pem;
+#    ssl_certificate_key /etc/nginx/ssl/default.pem;
+
+
+    proxy_http_version 1.1;
+    server_name  _;
+    server_tokens off;
+
+    error_log  /var/log/nginx/error_default_conn.log  warn;
+
+    location / {
+        proxy_http_version 1.1;
+        root  /var/www/nginx/default;
+    }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        proxy_http_version 1.1;
+        root   /usr/share/nginx/html;
+    }
+}
+
+server {
+	listen 127.0.0.1:80;
+	server_name healthcheck.containers.mybluemix.net;
+
+	location /ibmhealthcheck {
+		access_log off;
+		deny all;
+        allow 127.0.0.1;
+		default_type text/plain;
+		return 200 "200 healthy";
+	}
+
+    # this is required to avoid error if nginx is being monitored
+    # with an external software (like sysdig)
+    location /nginx_status {
+        allow 127.0.0.1;
+        deny all;
+        access_log off;
+        stub_status on;
+    }
+}
+
+server {
+        listen 9899;
+        location /status {
+        	    stub_status;
+            vhost_traffic_status_display;
+            vhost_traffic_status_display_format json;
+            access_log off;
+        }
+}
+
+server {
+        listen 127.0.0.1:8181;
+        location / {
+            allow 127.0.0.1;
+            deny all;
+            return 501 "Unable to fetch upstream endpoints from svc";
+        }
+}

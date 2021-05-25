@@ -1,0 +1,600 @@
+{{define "default-server"}}
+
+  {{ $server := . }}
+
+  {{if not .ServerTokens}}server_tokens off;{{end}}
+  {{if .Name}}server_name {{.Name}};{{end}}
+
+  {{if .KeepAliveTimeout}}keepalive_timeout {{.KeepAliveTimeout}};{{end}}
+  {{if .KeepAliveRequests}}keepalive_requests {{.KeepAliveRequests}};{{end}}
+
+  {{range $proxyHideHeader := .ProxyHideHeaders}}proxy_hide_header {{$proxyHideHeader}};{{end}}
+  {{range $proxyPassHeader := .ProxyPassHeaders}}proxy_pass_header {{$proxyPassHeader}};{{end}}
+
+  {{if .HSTS}}
+  add_header Strict-Transport-Security "max-age={{.HSTSMaxAge}}{{if .HSTSIncludeSubdomains}}; includeSubDomains{{end}}" always;
+  {{end}}
+
+  {{- if .RedirectToHTTPS}}
+    if ($http_x_forwarded_proto = 'http') {
+      return 301 https://$host$request_uri;
+    }
+    if ($scheme = http) {
+      return 301 https://$host$request_uri;
+    }
+  {{- end}}
+
+  {{ $httpsRedirect := .RedirectToHTTPS }}
+  {{ $serverName := .Name }}
+  {{ $IamGlobalEndpoint := .IamGlobalEndpoint }}
+
+  {{- if .LargeClientHeaderBuffers }}
+    large_client_header_buffers {{ .LargeClientHeaderBuffers }};
+  {{- end }}
+
+  {{- if .OptionLocation}}
+    location / {
+      if ($request_method = OPTIONS ) {
+          add_header Access-Control-Allow-Origin "dp:request-header('Origin')";
+          add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, HEAD";
+          add_header Access-Control-Allow-Credentials "true";
+          add_header Access-Control-Allow-Headers "Origin, Content-Type, Content-Length, Accept, X-Watson-Authorization-Token, X-WDC-PL-OPT-OUT, X-Watson-UserInfo, X-Watson-Learning-Opt-Out, X-Watson-Metadata";
+          add_header x-dp-response-code "200 Ok";
+          return 200;
+      }
+    }
+  {{- end}}
+
+  {{- if .WatsonAuthLocation}}
+      location = /crossdomain.xml {
+          root   /usr/share/nginx/xml;
+      }
+
+      location = /_watson_auth-microservice {
+            internal;
+            client_max_body_size        0;
+            proxy_pass_request_body     off;
+            proxy_ssl_verify            off;
+            proxy_set_header            Content-Length 0;
+            proxy_set_header            Host $host;
+            proxy_set_header            "x-global-k8fdic-transaction-id" $request_id;
+            proxy_set_header X-Watson-Request-Method $request_method;
+            proxy_set_header X-Watson-Request-Uri $request_uri;
+            proxy_set_header X-Watson-Request-Port $server_port;
+            proxy_set_header "X-FD-Client-Cert" $ssl_client_s_dn;
+            proxy_pass "{{.WatsonAuthLocation}}";
+      }
+  {{- end}}
+
+  {{ if or .IamAuthLocation .AppIDEnabled }}
+    proxy_buffer_size 8k;
+  {{ end }}
+
+  {{- if .IamAuthLocation}}
+
+      location = /check_iam {
+         auth_request_set $saved_cookie $upstream_http_set_cookie;
+         add_header Set-Cookie $saved_cookie;
+         if ($send_to_iam) {
+            return 302 $send_to_iam;
+         }
+         if ($target_path) {
+            return 302 https://$target_path;
+         }
+         return 407;
+      }
+
+      {{range $location := .Locations}}
+        {{if $location.IamAuthURL}}
+          location = /_iam_auth-microservice_{{$location.SvcName}} {
+                internal;
+                client_max_body_size        0;
+                proxy_pass_request_body     off;
+                proxy_ssl_verify            off;
+                proxy_set_header            Content-Length 0;
+                proxy_set_header            Host $host;
+                proxy_set_header            "x-global-k8fdic-transaction-id" $request_id;
+                proxy_set_header            "x-k8fdic-request-uri" $request_uri;
+                proxy_set_header            "x-client-id" "{{$location.ClientID}}";
+                proxy_set_header            "x-client-secret" "{{$location.ClientSecret}}";
+                proxy_set_header            "x-client-redirectURL" "{{$location.ClientRedirectURL}}";
+                proxy_set_header            "x-client-target-svc" "{{$serverName}}";
+                proxy_set_header            "x-k8fdic-target-svc" "{{$location.Upstream.Name}}{{$location.Rewrite}}";
+                proxy_set_header            "x-client-secret-namespace" "{{$location.ClientSecretNS}}";
+                proxy_set_header            "x-iam-global-endpoint" "{{$IamGlobalEndpoint}}";
+
+                {{ if   $location.ProxyBufferSize  }}
+                proxy_buffer_size {{$location.ProxyBufferSize}};
+                {{end}}
+                {{ if and $location.ProxyBuffers.Number  $location.ProxyBuffers.Size }}
+                proxy_buffers {{$location.ProxyBuffers.Number}} {{$location.ProxyBuffers.Size}};
+                {{end}}
+                {{ if  $location.ProxyBusyBufferSize }}
+                proxy_busy_buffers_size {{$location.ProxyBusyBufferSize}};
+                {{end}}
+
+                proxy_pass http://iam-appid-auth/validate;
+          }
+        {{end}}
+      {{end}}
+  {{- end}}
+
+  {{- if .IamCliAuthLocation}}
+          location = /_iam-cli-auth-microservice {
+                internal;
+                proxy_pass_request_body     off;
+                proxy_ssl_verify            off;
+                proxy_set_header            Content-Length 0;
+                proxy_set_header            Host $host;
+                proxy_set_header            "x-global-k8fdic-transaction-id" $request_id;
+                proxy_set_header            "x-iam-global-endpoint" "{{$IamGlobalEndpoint}}";
+                proxy_pass http://iam-appid-auth/validateCli;
+          }
+
+    {{if .IamAllCliAuthLocation}}
+         auth_request /_iam-cli-auth-microservice;
+    {{end}}
+  {{- end}}
+
+  {{- if .AppIDEnabled }}
+
+    {{- if .AppIDWebEnabled }}
+    location = /check_appid {
+
+       auth_request_set $appid_access $upstream_http_appid_access;
+       auth_request_set $appid_identity $upstream_http_appid_identity;
+       auth_request_set $appid_expiration $upstream_http_appid_cookie_expiration;
+       auth_request_set $appid_tenant $upstream_http_appid_tenant;
+
+      if ($send_to_logout) {
+        add_header Set-Cookie "appid-access-cookie-${appid_tenant}=Deleted; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; HttpOnly=true; Secure=true";
+        add_header Set-Cookie "appid-identity-cookie-${appid_tenant}=Deleted; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; HttpOnly=true; Secure=true";
+
+        return 302 $send_to_logout;
+      }
+
+      if ($send_to_appid) {
+        add_header Set-Cookie "original-request-uri=$original_request_uri; Path=/; HttpOnly=true; Secure=true";
+
+        return 302 $send_to_appid;
+      }
+      if ($target_path) {
+        add_header Set-Cookie "appid-access-cookie-${appid_tenant}=$appid_access; Path=/; Expires=$appid_expiration; HttpOnly=true; Secure=true";
+        add_header Set-Cookie "appid-identity-cookie-${appid_tenant}=$appid_identity; Path=/; Expires=$appid_expiration; HttpOnly=true; Secure=true";
+
+        add_header Set-Cookie "original-request-uri=Deleted; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; HttpOnly=true; Secure=true";
+
+        return 302 $scheme://$target_path;
+      }
+      return 407;
+    }
+
+    location @auth_error {
+      default_type application/json;
+
+      return 403 "{\"error\": \"$callback_error\", \"error_description\": \"$error_description\"}";
+    }
+    {{- end }}
+
+    {{range $location := .Locations}}
+      {{if (eq ($location.AppIDRequestType) ("web")) }}
+        location = /_appid_web_auth-microservice_{{$location.SvcName}}{{$location.Path}} {
+          internal;
+          proxy_pass_request_body     off;
+          proxy_ssl_verify            off;
+          proxy_set_header            Content-Length 0;
+          proxy_set_header            Host $host;
+          proxy_set_header            "x-global-k8fdic-transaction-id" $request_id;
+          proxy_set_header            "x-k8fdic-request-uri" $request_uri;
+          proxy_set_header            "x-forwarded-proto" $scheme;
+
+          proxy_set_header            "x-bind-secret" "{{ $location.AppIDSecret }}";
+          proxy_set_header            "x-bind-secret-namespace" "{{ $location.AppIDNameSpace }}";
+
+          proxy_set_header            "x-client-target-svc" "{{ $serverName }}";
+          proxy_set_header            "x-client-target-svc-path" "{{$location.Path}}";
+          proxy_set_header            "x-k8fdic-target-svc" "{{ $location.Upstream.Name }}";
+          proxy_set_header            "x-include-id-token" "{{ $location.AppIDToken }}";
+
+          proxy_read_timeout          {{$location.ProxyReadTimeout}};
+
+          {{ if $location.Rewrite }}
+          proxy_set_header            "x-k8fdic-target-rewrite" "{{ $location.Rewrite }}";
+          proxy_set_header            "x-k8fdic-original-path" "{{ $location.Path }}";
+          {{ end }}
+
+          {{ if   $location.ProxyBufferSize  }}
+          proxy_buffer_size {{$location.ProxyBufferSize}};
+          {{end}}
+          {{ if and $location.ProxyBuffers.Number  $location.ProxyBuffers.Size }}
+          proxy_buffers {{$location.ProxyBuffers.Number}} {{$location.ProxyBuffers.Size}};
+          {{end}}
+          {{ if  $location.ProxyBusyBufferSize }}
+          proxy_busy_buffers_size {{$location.ProxyBusyBufferSize}};
+          {{end}}
+          {{ if  $location.ClientMaxBodySize }}
+          client_max_body_size {{$location.ClientMaxBodySize}};
+          {{else}}
+          client_max_body_size 0;
+          {{end}}
+          proxy_pass http://iam-appid-auth/validateAppIDWeb;
+        }
+      {{end}}
+
+      {{if (eq ($location.AppIDRequestType) ("api")) }}
+      location = /_appid_api_auth-microservice_{{$location.SvcName}}{{$location.Path}} {
+        internal;
+        proxy_pass_request_body     off;
+        proxy_ssl_verify            off;
+        proxy_set_header            Content-Length 0;
+        proxy_set_header            Host $host;
+        proxy_set_header            "x-global-k8fdic-transaction-id" $request_id;
+
+        proxy_set_header            "x-bind-secret" "{{ $location.AppIDSecret }}";
+        proxy_set_header            "x-bind-secret-namespace" "{{ $location.AppIDNameSpace }}";
+
+        proxy_read_timeout          {{$location.ProxyReadTimeout}};
+
+        {{ if   $location.ProxyBufferSize  }}
+        proxy_buffer_size {{$location.ProxyBufferSize}};
+        {{end}}
+        {{ if and $location.ProxyBuffers.Number  $location.ProxyBuffers.Size }}
+        proxy_buffers {{$location.ProxyBuffers.Number}} {{$location.ProxyBuffers.Size}};
+        {{end}}
+        {{ if  $location.ProxyBusyBufferSize }}
+        proxy_busy_buffers_size {{$location.ProxyBusyBufferSize}};
+        {{end}}
+        {{ if  $location.ClientMaxBodySize }}
+        client_max_body_size {{$location.ClientMaxBodySize}};
+        {{else}}
+        client_max_body_size 0
+        {{end}}
+        proxy_pass http://iam-appid-auth/validateAppIDAPI;
+      }
+      {{end}}
+
+    {{end}}
+  {{- end}}
+
+  {{- if .ErrorActions}}
+        {{range $errActions := .ErrorActions}}
+            location = {{$errActions.Name}} {
+            {{range $actions := $errActions.Value}}
+                {{$actions}} {{end}}
+            }
+        {{end}}
+  {{- end}}
+
+  {{- if .GlobalCustomErrors}}
+        {{range $errors := .GlobalCustomErrors}}
+             error_page {{$errors.HTTPStatus}} = {{$errors.Action}};
+        {{end}}
+  {{- end}}
+
+  {{- if .ServerSnippets}}
+    # Server Snippets should be applied before Locations
+    {{range $value := .ServerSnippets}}
+    {{$value}}{{end}}
+  {{- end}}
+
+  {{range $location := .Locations}}
+    {{if not $location.WatsonUpstream}}
+      {{if $location.ExternalLocation}}
+         location {{$location.LocationModifier}} {{$location.Path}} {
+           {{range $locratelimitzone := $location.LocationRateLimitZones}}
+              {{if $locratelimitzone.Rate}}limit_req zone={{$locratelimitzone.Name}}_rate burst={{$locratelimitzone.Burst}} nodelay;{{end}}
+              {{if $locratelimitzone.Conn}} limit_conn {{$locratelimitzone.Name}}_conn {{$locratelimitzone.Conn}};{{end}}
+           {{end}}
+           {{- if $location.ProxyNextUpstreamValues}}
+               proxy_next_upstream {{$location.ProxyNextUpstreamValues}};
+           {{- end}}
+           {{- if $location.ProxyNextUpstreamTimeout}}
+                proxy_next_upstream_timeout {{$location.ProxyNextUpstreamTimeout}};
+           {{- end}}
+           {{- if $location.ProxyNextUpstreamTries}}
+                proxy_next_upstream_tries {{$location.ProxyNextUpstreamTries}};
+           {{- end}}
+
+           {{- if $location.CustomErrors}}
+              {{range $errors := $location.CustomErrors}}
+                  error_page {{$errors.HTTPStatus}} = {{$errors.Action}};
+              {{end}}
+           {{- end}}
+
+           {{if $location.SSLAuthentication}}
+             {{if not $location.PlainSSLAuthentication}}
+                proxy_ssl_trusted_certificate {{$location.ProxySslTrustedCertificate}};
+                {{if $location.SSLTwoWayAuthentication}}
+                  proxy_ssl_certificate {{$location.ProxySslCertificate}};
+                  proxy_ssl_certificate_key {{$location.ProxySslCertificateKey}};
+                {{end}}
+                proxy_ssl_verify on;
+                proxy_ssl_verify_depth {{$location.ProxySslVerifyDepth}};
+                {{if $location.ProxySSLName}}
+                  proxy_ssl_name {{$location.ProxySSLName}};
+                  proxy_ssl_server_name on;
+                {{end}}
+             {{end}}
+           {{end}}
+           proxy_connect_timeout {{$location.ProxyConnectTimeout}};
+           proxy_read_timeout {{$location.ProxyReadTimeout}};
+           {{ if   $location.ProxyBufferSize  }}
+            proxy_buffer_size {{$location.ProxyBufferSize}};
+           {{end}}
+           {{ if and $location.ProxyBuffers.Number  $location.ProxyBuffers.Size }}
+            proxy_buffers {{$location.ProxyBuffers.Number}} {{$location.ProxyBuffers.Size}};
+           {{end}}
+           {{ if  $location.ProxyBusyBufferSize }}
+            proxy_busy_buffers_size {{$location.ProxyBusyBufferSize}};
+           {{end}}
+           client_max_body_size {{$location.ClientMaxBodySize}};
+           proxy_buffering {{if $location.ProxyBuffering}}on{{else}}off{{end}};
+
+           {{ if $location.ExtDNSResolver }}
+           	resolver {{$location.ExtDNSResolver}};
+           {{end}}
+           proxy_pass {{$location.ExternalSvc}}$uri$is_args$args;
+         }
+      {{end}}
+
+      {{if not $location.ExternalLocation}}
+        location {{$location.LocationModifier}} {{$location.Path}} {
+
+              {{ if not $server.IsDefaultHealthcheck }}
+
+              {{range $locratelimitzone := $location.LocationRateLimitZones}}
+              {{if $locratelimitzone.Rate}}limit_req zone={{$locratelimitzone.Name}}_rate burst={{$locratelimitzone.Burst}} nodelay;{{end}}
+              {{if $locratelimitzone.Conn}} limit_conn {{$locratelimitzone.Name}}_conn {{$locratelimitzone.Conn}};{{end}}
+              {{end}}
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection $connection_upgrade;
+              proxy_set_header "x-global-k8fdic-transaction-id" $request_id;
+              more_clear_headers "x-global-k8fdic-transaction-id";
+              {{- if $location.StatsdConfigEnabled}}
+                  statsd_timing "rtime.$request_method.$status.$uri" "$upstream_response_time";
+                  statsd_timing "servicertime.$request_method.$status.{{$location.Path}}" "$upstream_response_time";
+              {{- end}}
+
+              proxy_connect_timeout {{$location.ProxyConnectTimeout}};
+              proxy_read_timeout {{$location.ProxyReadTimeout}};
+              {{ if  $location.ProxyBufferSize  }}
+                proxy_buffer_size {{$location.ProxyBufferSize}};
+              {{end}}
+
+              {{ if and $location.ProxyBuffers.Number $location.ProxyBuffers.Size }}
+                proxy_buffers {{$location.ProxyBuffers.Number}} {{$location.ProxyBuffers.Size}};
+              {{end}}
+
+              {{ if  $location.ProxyBusyBufferSize }}
+                proxy_busy_buffers_size {{$location.ProxyBusyBufferSize}};
+              {{end}}
+              client_max_body_size {{$location.ClientMaxBodySize}};
+              {{- if $location.WatsonSecondaryHost }}
+                proxy_set_header Host {{$location.WatsonSecondaryHost}};
+              {{- else }}
+                {{if $location.AddHostPort}}proxy_set_header Host $host:$server_port{{else}}proxy_set_header Host $host{{end}};
+              {{- end }}
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Host $host;
+              proxy_set_header X-Forwarded-Port $server_port;
+              proxy_set_header X-Forwarded-Proto {{if $httpsRedirect}}https{{else}}$scheme{{end}};
+
+              {{range $proxySetHeader := $location.ProxySetHeaders}}proxy_set_header {{$proxySetHeader}}{{end}}
+              {{range $moreSetHeader := $location.MoreSetHeaders}}more_set_headers {{$moreSetHeader}}{{end}}
+              {{range $moreClearHeader := $location.MoreClearHeaders}}more_clear_headers {{$moreClearHeader}}{{end}}
+
+              proxy_buffering {{if $location.ProxyBuffering}}on{{else}}off{{end}};
+
+              {{if $location.KeepAliveTimeout}}keepalive_timeout {{$location.KeepAliveTimeout}};{{end}}
+              {{if $location.KeepAliveRequests}}keepalive_requests {{$location.KeepAliveRequests}};{{end}}
+
+              {{- if $location.Options}}
+                  if ($request_method = OPTIONS ) {
+                      add_header Access-Control-Allow-Origin "dp:request-header('Origin')";
+                      add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, HEAD";
+                      add_header Access-Control-Allow-Credentials "true";
+                      add_header Access-Control-Allow-Headers "Origin, Content-Type, Content-Length, Accept, X-Watson-Authorization-Token, X-WDC-PL-OPT-OUT, X-Watson-UserInfo, X-Watson-Learning-Opt-Out, X-Watson-Metadata";
+                      add_header x-dp-response-code "200 Ok";
+                      return 200;
+                  }
+              {{- end}}
+
+              {{- if $location.WatsonSecondarySvc}}
+                  resolver kube-dns.kube-system.svc.cluster.local;
+              {{- end}}
+
+              {{- if $location.WatsonAuthURL}}
+                  auth_request /_watson_auth-microservice;
+                  auth_request_set $watson_service_path $upstream_http_x_watson_service_path;
+                  auth_request_set $watson_service_target $upstream_http_x_watson_service_target;
+                  auth_request_set $watson_userinfo $upstream_http_x_watson_userinfo;
+                  auth_request_set $watson_learning_opt_out $upstream_http_x_watson_learning_opt_out;
+                  proxy_set_header X-Watson-Userinfo $watson_userinfo;
+                  proxy_set_header X-Watson-Learning-Opt-Out $watson_learning_opt_out;
+
+              {{- else if $location.IamAuthURL}}
+                  auth_request_set $watson_userinfo $upstream_http_x_watson_userinfo;
+                  auth_request_set $send_to_iam $upstream_http_x_auth_send_iam;
+                  proxy_set_header X-Watson-Userinfo $watson_userinfo;
+                  auth_request /_iam_auth-microservice_{{$location.SvcName}};
+                  auth_request_set $saved_cookie $upstream_http_set_cookie;
+                  auth_request_set $target_path $upstream_http_x_watson_init_url;
+                  add_header Set-Cookie $saved_cookie;
+                  error_page 401 = /check_iam;
+
+              {{- else if $location.IamCLIAuthURL}}
+                  auth_request /_iam-cli-auth-microservice;
+
+              {{- else if (eq ($location.AppIDRequestType) ("web")) }}
+                # sets header containing authorization to /_appid_web_... location
+                auth_request_set $send_to_appid $upstream_http_x_auth_send_appid;
+                auth_request_set $send_to_logout $upstream_http_x_auth_appid_logout;
+                auth_request_set $original_request_uri $upstream_http_x_auth_original_request_uri;
+
+                auth_request /_appid_web_auth-microservice_{{$location.SvcName}}{{$location.Path}};
+
+                # Sets error headers in order to return useful error message to user
+                auth_request_set $callback_error $upstream_http_x_appid_callback_error;
+                auth_request_set $error_description $upstream_http_x_appid_error_description;
+
+                error_page 403 = @auth_error;
+
+                # Sets the access and identity cookies
+                auth_request_set $appid_access $upstream_http_appid_access;
+                auth_request_set $appid_identity $upstream_http_appid_identity;
+                auth_request_set $appid_expiration $upstream_http_appid_cookie_expiration;
+                auth_request_set $appid_tenant $upstream_http_appid_tenant;
+
+                add_header Set-Cookie "appid-access-cookie-${appid_tenant}=$appid_access; Path=/; Expires=$appid_expiration; HttpOnly=true; Secure=true";
+                add_header Set-Cookie "appid-identity-cookie-${appid_tenant}=$appid_identity; Path=/; Expires=$appid_expiration; HttpOnly=true; Secure=true";
+
+                # Add Target Path for where to send request in X-AppID-init-URL, set in auth microservice
+                auth_request_set $target_path $upstream_http_x_appid_init_url;
+
+                # Add the auth header to proxy pass
+                auth_request_set $appid_auth $upstream_http_x_appid_auth;
+
+                # Send any unauthorized errors to /check_appid path
+                error_page 401 = /check_appid;
+
+                proxy_set_header Authorization $appid_auth;
+
+              {{- else if (eq ($location.AppIDRequestType) ("api")) }}
+                auth_request /_appid_api_auth-microservice_{{$location.SvcName}}{{$location.Path}};
+              {{- end }}
+
+              {{- if $location.ProxyNextUpstreamValues}}
+                  proxy_next_upstream {{$location.ProxyNextUpstreamValues}};
+              {{- end}}
+              {{- if $location.ProxyNextUpstreamTimeout}}
+                  proxy_next_upstream_timeout {{$location.ProxyNextUpstreamTimeout}};
+              {{- end}}
+              {{- if $location.ProxyNextUpstreamTries}}
+                  proxy_next_upstream_tries {{$location.ProxyNextUpstreamTries}};
+              {{- end}}
+
+              {{- if $location.CustomErrors}}
+                    {{range $errors := $location.CustomErrors}}
+                        error_page {{$errors.HTTPStatus}} = {{$errors.Action}};
+                    {{end}}
+              {{- end}}
+
+              {{- if $location.LocationSnippets}}
+                # Location Snippets should be applied before Proxy Passes
+                {{range $locationSnippet := $location.LocationSnippets}}
+                  {{$locationSnippet}}
+                {{end}}
+              {{- end}}
+
+              {{- if $location.AllLocationSnippet}}
+                # Location Snippets should be applied before Proxy Passes
+                {{range $allLocationSnippet := $location.AllLocationSnippet}}
+                  {{$allLocationSnippet}}
+                {{end}}
+              {{- end}}
+
+              {{if $location.SSLAuthentication}}
+                  {{if not $location.PlainSSLAuthentication}}
+                      proxy_ssl_trusted_certificate {{$location.ProxySslTrustedCertificate}};
+                      {{if $location.SSLTwoWayAuthentication}}
+                          proxy_ssl_certificate {{$location.ProxySslCertificate}};
+                          proxy_ssl_certificate_key {{$location.ProxySslCertificateKey}};
+                      {{end}}
+                      proxy_ssl_verify on;
+                      proxy_ssl_verify_depth {{$location.ProxySslVerifyDepth}};
+                      {{if $location.ProxySSLName}}
+                          proxy_ssl_name {{$location.ProxySSLName}};
+                          proxy_ssl_server_name on;
+                      {{end}}
+                  {{end}}
+                  {{- if $location.WatsonSecondarySvc}}
+                      proxy_pass https://{{$location.WatsonSecondarySvc}}.kube-system.svc.cluster.local/$watson_service_target$watson_service_path;
+                  {{- else if $location.WatsonAuthURL}}
+                      proxy_pass https://$backend$watson_service_path;
+                  {{- else if $location.IamAuthURL}}
+                      proxy_pass https://$target_path;
+                  {{- else if $location.IstioEnabled}}
+                      proxy_pass https://{{$location.IstioIP}}:{{$location.IstioPort}}{{$location.Rewrite}};
+                  {{- else if (eq ($location.AppIDRequestType) ("web")) }}
+                      proxy_pass https://$target_path;
+                  {{- else}}
+                      proxy_pass https://{{$location.Upstream.Name}}{{$location.Rewrite}};
+                  {{- end}}
+              {{else}}
+                  {{- if $location.WatsonSecondarySvc}}
+                        proxy_pass http://{{$location.WatsonSecondarySvc}}.kube-system.svc.cluster.local/$watson_service_target$watson_service_path;
+                  {{- else if $location.WatsonAuthURL}}
+                        proxy_pass http://$backend$watson_service_path;
+                  {{- else if $location.IamAuthURL}}
+                        proxy_pass http://$target_path;
+                  {{- else if $location.IstioEnabled}}
+                        proxy_pass http://{{$location.IstioIP}}:{{$location.IstioPort}}{{$location.Rewrite}};
+                  {{- else if (eq ($location.AppIDRequestType) ("web")) }}
+                        proxy_pass http://$target_path;
+                  {{- else}}
+                        proxy_pass http://{{$location.Upstream.Name}}{{$location.Rewrite}};
+                  {{- end}}
+              {{end}}
+
+              {{if $location.ActivityTracker }}
+                {{if $location.ActivityTracker}}
+                  set $resp_body "_";
+                  set $single_activitytracker_body_write true;
+                {{end}}
+
+                log_by_lua_block {
+
+                  {{if $location.ActivityTracker}}
+                    ngx.var.single_activitytracker_body_write = "true"
+                  {{end}}
+                }
+                body_filter_by_lua_block {
+                    {{if $location.ActivityTracker}}
+                      local req_body = "_"
+                      local resp_body = ngx.arg[1]
+                      ngx.ctx.buffered = (ngx.ctx.buffered or "") .. resp_body
+                      if ngx.arg[2] then
+                        ngx.var.resp_body = ngx.ctx.buffered
+                      end
+                      local resp_body_json=resp_body:gsub('"', '\\"')
+                      local final_resp_body = resp_body_json:gsub("\n", "")
+                    {{end}}
+
+                    function doLua ()
+                      {{if $location.ActivityTracker}}
+                        local cadf_activity_tracker = util.getCADF(req_body,final_resp_body)
+                        local activityTrackerFilename = "/var/log/nginx/activitytracker/alb_activity_tracker_"..os.getenv("HOSTNAME") .. ".log"
+                        local file, err = io.open(activityTrackerFilename, "a")
+                        if (not err and ngx.var.single_activitytracker_body_write == "true")  then
+                          ngx.var.single_activitytracker_body_write = "false"
+                          file:write(cadf_activity_tracker,"\n")
+                          file:close()
+                        else
+                          if(ngx.var.single_activitytracker_body_write == "true") then
+                            ngx.var.single_activitytracker_body_write = "false"
+                            logErrorhandler( err )
+                          end
+                        end
+                      {{end}}
+                    end
+                    function logErrorhandler( err )
+                      {{if $location.ActivityTracker}}
+                        local activityTrackerFilename = "/var/tmp/alb_activity_tracker_error_"..os.getenv("HOSTNAME") .. ".log"
+                        local file, temperr = io.open(activityTrackerFilename, "a")
+                        if not temperr then
+                          file:write(err,"\n")
+                          file:close()
+                         end
+                      {{end}}
+                    end
+                    xpcall( doLua, logErrorhandler )
+                }
+              {{end}}
+              {{end}}
+        }
+      {{end}}
+    {{end}}
+  {{end}}
+{{end}}

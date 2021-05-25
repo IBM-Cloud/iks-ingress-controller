@@ -1,0 +1,109 @@
+{{range $globalratelimitzone := .GlobalRatelimitzones}}
+{{if $globalratelimitzone.Rate}}limit_req_zone {{$globalratelimitzone.Key}} zone=global_{{$globalratelimitzone.Name}}_rate:1m rate={{$globalratelimitzone.Rate}}{{$globalratelimitzone.RateUnit}};{{end}}
+{{if $globalratelimitzone.Conn}}limit_conn_zone {{$globalratelimitzone.Key}} zone=global_{{$globalratelimitzone.Name}}_conn:1m;{{end}}
+{{end}}
+
+{{range $ratelimitzone := .ServiceRatelimitzones}}
+{{if $ratelimitzone.Rate}}limit_req_zone {{$ratelimitzone.Key}} zone={{$ratelimitzone.Name}}_rate:{{$ratelimitzone.RateMem}} rate={{$ratelimitzone.Rate}}{{$ratelimitzone.RateUnit}};{{end}}
+{{if $ratelimitzone.Conn}}limit_conn_zone {{$ratelimitzone.Key}} zone={{$ratelimitzone.Name}}_conn:{{$ratelimitzone.ConnMem}};{{end}}
+{{end}}
+
+{{range $upstream := .Upstreams}}
+  upstream {{$upstream.Name}} {
+    {{if $upstream.StickyCookie}}sticky {{$upstream.StickyCookie}};{{end}}
+    {{range $server := $upstream.UpstreamServers}}
+    server {{$server.Address}}:{{$server.Port}} {{ if $server.MaxFails }}max_fails={{ $server.MaxFails }}{{ end }} {{if $server.FailTimeout }}fail_timeout={{ $server.FailTimeout }}{{ end }};{{end}}
+    {{if $upstream.LBType}}{{$upstream.LBType}};{{end}}
+    {{if $upstream.KeepAlive}}keepalive {{$upstream.KeepAlive}};{{end}}
+    {{if $upstream.KeepAliveTimeout}}keepalive_timeout {{$upstream.KeepAliveTimeout}};{{end}}
+
+  }
+{{end}}
+
+{{range $server := .Servers}}
+  {{- if $server.WatsonAuthLocation}}
+    map $watson_service_target $backend {
+      {{range $location := $server.Locations}}
+      {{- if $location.MapPath}}
+        {{$location.MapPath}} {{$location.Upstream.Name}};
+      {{- end}}
+      {{end}}
+    }
+  {{- end}}
+{{end}}
+
+{{range $server := .Servers}}
+  server {
+
+    {{range $globalRateLimitZone := $server.GlobalSerRateLimitZones }}
+    {{if $globalRateLimitZone.Rate}}limit_req zone=global_{{$globalRateLimitZone.Name}}_rate burst={{$globalRateLimitZone.Burst}} nodelay;{{end}}
+    {{if $globalRateLimitZone.Conn}}limit_conn global_{{$globalRateLimitZone.Name}}_conn {{$globalRateLimitZone.Conn}};{{end}}
+    {{end}}
+
+    {{if $server.HTTPPort}}listen {{$server.HTTPPort}};
+    {{else if (not $server.HTTPSPort)}}listen 80{{if $server.IsDefaultServer}} default_server{{end}};
+    {{end}}
+
+    {{if $server.SSL}}
+      {{if and ($server.HTTPSPort) (not $server.MutualAuthPort)}}
+        listen {{$server.HTTPSPort}} ssl;
+        ssl_certificate {{$server.SSLCertificate}};
+        ssl_certificate_key {{$server.SSLCertificateKey}};
+        {{template "default-server" $server }}
+
+      {{else if and ($server.HTTPSPort) ($server.MutualAuthPort)}}
+        listen {{$server.HTTPSPort}} ssl;
+        ssl_certificate {{$server.SSLCertificate}};
+        ssl_certificate_key {{$server.SSLCertificateKey}};
+        {{ $non_ma_server := buildLocation $server $server.NonMutualAuthPaths }}
+        {{template "default-server" $non_ma_server }}
+
+      {{else if and ($server.MutualAuthPort) (not $server.HTTPSPort)}}
+        {{if and (not $server.HTTPPort) (not (eq $server.MutualAuthPort "443"))}}
+          listen 443 ssl;
+          ssl_certificate {{$server.SSLCertificate}};
+          ssl_certificate_key {{$server.SSLCertificateKey}};
+        {{end}}
+        {{ $non_ma_server := buildLocation $server $server.NonMutualAuthPaths }}
+        {{ template "default-server" $non_ma_server }}
+
+      {{else if and (not $server.HTTPPort) (not $server.MutualAuthPort)}}
+        listen 443 ssl{{if $server.IsDefaultServer}} default_server{{end}};
+        ssl_certificate {{$server.SSLCertificate}};
+        ssl_certificate_key {{$server.SSLCertificateKey}};
+
+        {{ if $server.IsDefaultServer }}
+          location / {
+              proxy_http_version 1.1;
+              root  /var/www/nginx/default;
+          }
+        {{ else }}
+          {{template "default-server" $server }}
+        {{ end }}
+      {{end}}
+    {{end}}
+
+    {{ if not $server.SSL }}
+      {{template "default-server" $server }}
+    {{ end }}
+  }
+
+  {{if ($server.MutualAuthPort)}}
+    {{if not (eq ($server.MutualAuthPort) ($server.HTTPSPort))}}
+      {{if not (eq ($server.MutualAuthPort) ($server.HTTPPort))}}
+        {{if $server.SSL}}
+          server {
+            listen {{$server.MutualAuthPort}} ssl;
+            ssl_certificate {{$server.SSLCertificate}};
+            ssl_certificate_key {{$server.SSLCertificateKey}};
+            ssl_client_certificate {{$server.SSLClientCertificate}};
+            ssl_verify_client on;
+            ssl_verify_depth 5;
+            {{ $ma_server := buildLocation $server $server.MutualAuthPaths }}
+            {{ template "default-server" $ma_server }}
+          }
+        {{end}}
+      {{end}}
+    {{end}}
+  {{end}}
+{{end}}

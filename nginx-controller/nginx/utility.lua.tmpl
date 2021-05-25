@@ -1,0 +1,82 @@
+
+local M = {}
+ 
+local function getCADF(req_body,resp_body)
+      local reqh,resph = '',''
+      local req_headers,res_headers="NA","NA"
+      local req_body="\'request_body\':\'"..req_body.."\',"
+      local res_body="\'response_body\':\'"..resp_body.."\',"
+      local activity_tracker_body
+      local initiator,target,reason
+      local target_name,target_id = "container-service-alb","null"
+      local attachments = "NA"
+      local req_header_content_type,resp_header_content_type = "not_available","not_available"
+      local initiator_name,initiator_id = "null","null"
+      local initiator_typeuri = "service/security/account/user"
+      local eventType = "activity"
+      local eventTime = os.date('%Y-%m-%d %H:%M:%S',os.time())
+      local action = "app access"
+      local outcome = "success"
+      local uri = ngx.var.request_uri
+      local reasonCode = ngx.var.status
+      local reasonType = ngx.var.scheme
+      local typeURI = "http://schemas.dmtf.org/cloud/audit/1.0/event"
+      local id = "null"
+      local h = ngx.req.get_headers()
+      
+      if reasonCode ~= "200" then 
+        outcome = "failure"
+      end
+      math.randomseed(os.clock()*100000000000)
+      local random = math.random
+      local function uniqueid()
+        local template ='xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'
+          return string.gsub(template, '[xy]', function (c)
+              local v = (c == 'x') and random(0, 0xf) or random(8, 0xb)
+              return string.format('%x', v)
+          end)
+       end
+      id = uniqueid()
+      for k, v in pairs(h) do
+          if type(v) == "table" then
+              local s = '('
+              for ik, iv in pairs(v) do
+                 s = s..iv..", "
+              end
+              reqh = reqh..'\''..k..': '..s..'\','
+          else
+          	  if k == "content-type" then
+                req_header_content_type = v
+              end
+              reqh = reqh..'\''..k..': '..v..'\','
+          end
+      end
+      req_headers = reqh..""
+
+      h = ngx.resp.get_headers()
+      for k, v in pairs(h) do
+          if type(v) == "table" then
+              local s = '('
+              for ik, iv in pairs(v) do
+                 s = s..iv..", "
+              end
+              resph = resph..'\''..k..': '..s..'\','
+          else
+              if k == "content-type" then
+                resp_header_content_type = v
+              end
+              resph = resph..'\''..k..': '..v..'\','
+          end
+      end
+      res_headers = resph..""
+      reason='{"reasonCode":"'..reasonCode..'","reasonType":"'..reasonType..'"}'
+      initiator='{"name":"'..initiator_name..'","id":"'..initiator_id..'","typeURI":"'..initiator_typeuri..'"}'
+      target='{"name":"'..target_name..'","typeURI":"'..uri..'","id":"'..target_id..'"}'
+      attachments='[{"typeURI":'..'"request/headers","contentType":"'..req_header_content_type..'","content":\"'..req_headers..'\"},{"typeURI":'..'"response/headers","contentType":"'..resp_header_content_type..'","content":\"'..res_headers..'\"},{"typeURI":'..'"request/body","content":\"'..req_body..'\"},{"typeURI":'..'"response/body","content":\"'..res_body..'\"}]'
+      
+      activity_tracker_body='{"payload":{"outcome":"'..outcome..'","id":"'..id..'","typeURI":"'..typeURI..'","initiator":'..initiator..',"target":'..target..',"attachments":'..attachments..',"requestPath":"'..uri..'","reason":'..reason..',"eventType":"'..eventType..'","eventTime":"'..eventTime..'","action":"'..action..'"}}'
+   return activity_tracker_body
+end
+M.getCADF = getCADF
+ 
+return M

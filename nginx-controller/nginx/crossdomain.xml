@@ -1,0 +1,7 @@
+<cross-domain-policy>
+                <allow-access-from domain="*.bluemix.net" to-ports="443"/>
+                <allow-access-from domain="*.mybluemix.net" to-ports="443"/>
+                <allow-access-from domain="*.ibm.com" to-ports="443"/>
+                <allow-http-request-headers-from domain="*" headers="*"/>
+</cross-domain-policy>
+

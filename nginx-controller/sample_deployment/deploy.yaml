@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+  generation: 1
+  labels:
+    app: ibm-cloud-ingress
+  name: ibm-cloud-ingress
+  namespace: kube-system
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 2
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: ibm-cloud-ingress
+  strategy:
+    rollingUpdate:
+      maxSurge: 33%
+      maxUnavailable: 50%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: ibm-cloud-ingress
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: dedicated
+                operator: In
+                values:
+                - edge
+            weight: 100
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: dedicated
+                operator: NotIn
+                values:
+                - internal
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - ibm-cloud-ingress
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - args:
+        - -v=3
+        - --nginx-configmaps=kube-system/ibm-cloud-provider-ingress-cm
+        - -logtostderr=true
+        env:
+        - name: ARMADA_POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: SECURED_NAMESPACE
+          value: ibm-cert-store
+        - name: INGRESS_IMAGE
+          value: <image_reference>
+        - name: INGRESS_RESOURCE_CREATION_RATE
+          valueFrom:
+            configMapKeyRef:
+              key: ingress-resource-creation-rate
+              name: ibm-cloud-provider-ingress-cm
+              optional: true
+        - name: INGRESS_RESOURCE_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              key: ingress-resource-timeout
+              name: ibm-cloud-provider-ingress-cm
+              optional: true
+        image: <image_reference>
+        imagePullPolicy: Always
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - touch /var/log/nginx/customerlogs/customerlogAccess_${HOSTNAME}.log;
+                touch /var/log/nginx/customerlogs/customerlogError_${HOSTNAME}.log;
+                chown -R nginx:nginx /var/log/nginx/customerlogs; chmod 640 /var/log/nginx/customerlogs/*;
+                chown -R nginx:nginx /var/log/nginx/activitytracker; chmod 640 /var/log/nginx/activitytracker/*;
+                while true; do var=$(cat /tmp/post-start-check.txt); if [ "${INGRESS_IMAGE##*:}"
+                -lt "515" ] || [ "$var" = "Completed." ] || [ "$var" = "Timed out."
+                ]; then break; else sleep 2; fi; done
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 300
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: nginx-ingress
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        - containerPort: 443
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 10m
+            memory: 100Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/log/nginx/customerlogs
+          name: nginx-customer-log
+        - mountPath: /var/log/nginx/activitytracker
+          name: ingressctl-at-log
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: ibm-ingress
+      serviceAccountName: ibm-ingress
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - key: dedicated
+        value: edge
+      volumes:
+      - hostPath:
+          path: /var/log/alb/customerlogs
+          type: ""
+        name: nginx-customer-log
+      - hostPath:
+          path: /var/log/at/ingress
+          type: DirectoryOrCreate
+        name: ingressctl-at-log

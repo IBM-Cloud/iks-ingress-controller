@@ -1,0 +1,74 @@
+local C = {}
+ 
+local function getCustomerLogs()
+      local time_local = ngx.var.time_local
+      local request = ngx.var.request
+      local request_id = ngx.var.request_id
+      local upstream_addr = ngx.var.upstream_addr
+      local upstream_status = ngx.var.upstream_status
+      local request_time = ngx.var.request_time
+      local upstream_response_time = ngx.var.upstream_response_time
+      local upstream_connect_time = ngx.var.upstream_connect_time
+      local upstream_header_time = ngx.var.upstream_header_time
+      local customer_logs_body 
+
+      if time_local then 
+            time_local = ngx.var.time_local
+      else 
+            time_local = ""
+      end
+
+      if request then 
+            request = ngx.var.request
+      else 
+            request = ""
+      end
+
+      if request_id then 
+            request_id = ngx.var.request_id
+      else
+            request_id = ""
+      end
+
+      if upstream_addr then 
+            upstream_addr = ngx.var.upstream_addr
+      else
+            upstream_addr = ""
+      end
+
+      if upstream_status then 
+            upstream_status = ngx.var.upstream_status
+      else
+            upstream_status = ""
+      end
+
+      if request_time then 
+            request_time = ngx.var.request_time
+      else
+            request_time = ""
+      end
+
+      if upstream_response_time then 
+            upstream_response_time = ngx.var.upstream_response_time
+      else
+            upstream_response_time = ""
+      end
+
+      if upstream_connect_time then 
+            upstream_connect_time = ngx.var.upstream_connect_time
+      else
+            upstream_connect_time = ""
+      end
+      
+      if upstream_header_time then 
+            upstream_header_time = ngx.var.upstream_header_time
+      else
+            upstream_header_time = ""
+      end
+            customer_logs_body='{"time_local":"'..time_local..'","request":"'..request..'","request_id":"'..request_id..'","upstream_addr":'..upstream_addr..',"upstream_status":'..upstream_status..',"request_time":'..request_time..',"upstream_response_time":'..upstream_response_time..',"upstream_connect_time":"'..upstream_connect_time..'","upstream_header_time":'..upstream_header_time..'"}' 
+            return customer_logs_body
+      
+end
+C.getCustomerLogs = getCustomerLogs
+return C
+      

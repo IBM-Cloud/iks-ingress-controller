@@ -1,0 +1,39 @@
+{{ $snortEnabled := .SnortEnabled }}
+{{ $snortUpstream := .SnortUpstream }}
+
+{{range $globalratelimitzone := .GlobalRatelimitzones}}
+{{if $globalratelimitzone.Rate}}limit_req_zone {{$globalratelimitzone.Key}} zone=global_{{$globalratelimitzone.Name}}_rate:1m rate={{$globalratelimitzone.Rate}}{{$globalratelimitzone.RateUnit}};{{end}}
+{{if $globalratelimitzone.Conn}}limit_conn_zone {{$globalratelimitzone.Key}} zone=global_{{$globalratelimitzone.Name}}_conn:1m;{{end}}
+{{end}}
+
+{{range $ratelimitzone := .ServiceRatelimitzones}}
+{{if $ratelimitzone.Rate}}limit_req_zone {{$ratelimitzone.Key}} zone={{$ratelimitzone.Name}}_rate:{{$ratelimitzone.RateMem}} rate={{$ratelimitzone.Rate}}{{$ratelimitzone.RateUnit}};{{end}}
+{{if $ratelimitzone.Conn}}limit_conn_zone {{$ratelimitzone.Key}} zone={{$ratelimitzone.Name}}_conn:{{$ratelimitzone.ConnMem}};{{end}}
+{{end}}
+
+{{range $upstream := .Upstreams}}
+  upstream {{$upstream.Name}} {
+    {{if $upstream.StickyCookie}}sticky {{$upstream.StickyCookie}};{{end}}
+    {{range $server := $upstream.UpstreamServers}}
+    server {{$server.Address}}:{{$server.Port}};{{end}}
+    {{if $upstream.KeepAlive}}keepalive {{$upstream.KeepAlive}};{{end}}
+    {{if $upstream.LBType}}{{$upstream.LBType}};{{end}}
+  }
+{{end}}
+
+{{range $server := .Servers}}
+  server {
+    {{ if $snortEnabled }}
+      # Snort Servers
+      {{range $snortServer := $snortUpstream.UpstreamServers}}
+        listen {{$snortServer.Address}}:{{$snortServer.Port}};{{end}}
+    {{end}}
+
+    {{range $globalRateLimitZone := $server.GlobalSerRateLimitZones }}
+    {{if $globalRateLimitZone.Rate}}limit_req zone=global_{{$globalRateLimitZone.Name}}_rate burst={{$globalRateLimitZone.Burst}} nodelay;{{end}}
+    {{if $globalRateLimitZone.Conn}}limit_conn global_{{$globalRateLimitZone.Name}}_conn {{$globalRateLimitZone.Conn}};{{end}}
+    {{end}}
+
+    {{ template "default-server" $server }}
+  }
+{{end}}

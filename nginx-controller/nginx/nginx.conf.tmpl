@@ -1,0 +1,128 @@
+user  nginx;
+worker_processes  auto;
+worker_rlimit_nofile 30000;
+
+{{if .ActivityTracker }}
+  env HOSTNAME;
+{{end}}
+
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+events {
+  worker_connections  10240;
+  multi_accept on;
+
+}
+
+stream {
+  include /etc/nginx/streamconf.d/*.conf;
+}
+
+http {
+  vhost_traffic_status_zone shared:vhost_traffic_status:{{- if .VtsStatusZoneSize}}{{.VtsStatusZoneSize}}{{else}}10m{{end}};
+  include       /etc/nginx/mime.types;
+  default_type  application/octet-stream;
+
+  {{if .ActivityTracker}}
+    lua_package_path '/usr/local/lib/lua/5.1/?.lua;;';
+    init_by_lua_block {
+      util = require("utility")
+    }
+  {{end}}
+
+  ssl_protocols {{if .SSLProtocols}}{{.SSLProtocols}}{{else}}TLSv1.2 TLSv1.3{{end}};
+  {{- if .SSLCiphers}}ssl_ciphers "{{.SSLCiphers}}";{{end}}
+
+
+  {{if .LogFormat}}
+  log_format  main {{.LogFormatEscapeJSON}} '{{.LogFormat}}';
+  {{else}}
+  log_format  main escape=json '{"time_date": "$time_iso8601",'
+                                 	'"client": "$remote_addr", '
+					'"host": "$http_host", '
+					'"scheme": "$scheme", '
+					'"request_method": "$request_method", '
+					'"request_uri": "$uri", '
+					'"request_id": "$request_id", '
+                    '"status": $status, '
+                    '"upstream_addr": "$upstream_addr", '
+                    '"upstream_status": $upstream_status, '
+                    '"request_time": $request_time, '
+                    '"upstream_response_time": $upstream_response_time, '
+                    '"upstream_connect_time": $upstream_connect_time, '
+                    '"upstream_header_time": $upstream_header_time}';
+  {{end}}
+  {{if .AccessLogEnabled}}
+    access_log  /var/log/nginx/access.log main {{ if .AccessLogBuffer }}buffer={{ .AccessLogBuffer }}{{ end }} {{if .AccessLogFlush }}flush={{ .AccessLogFlush }}{{ end }};
+  {{else}}
+    access_log  /var/log/nginx/access.log main;
+  {{end}}
+  error_log  /var/log/nginx/error.log  warn;
+
+  sendfile        on;
+  tcp_nopush      on;
+  tcp_nodelay     on;
+  ssi             on;
+
+  keepalive_timeout {{if .InKeepAlive}}{{.InKeepAlive}}{{else}} 8s{{end}};
+  keepalive_requests {{if .InKeepaliveRequests}}{{.InKeepaliveRequests}}{{else}} 4096{{end}};
+
+  server_tokens off;
+  more_clear_headers Server;
+  server_names_hash_bucket_size 1024;
+  server_names_hash_max_size 16384;
+  client_max_body_size 2M;
+  client_body_buffer_size 128k;
+  map_hash_bucket_size 128;
+
+  underscores_in_headers on;
+
+  ssl_session_cache shared:SSL:10m; # 10 meg session cache, doc says this should be enough for 40,000 connections
+  ssl_session_timeout 10m; # 10 minute SSL session timeout
+  ssl_prefer_server_ciphers on;
+
+  map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+  }
+
+  proxy_max_temp_file_size 0;
+  proxy_buffers 8 4k;
+  proxy_http_version 1.1;
+
+  {{- if .HTTPSnippets}}
+  {{range $value := .HTTPSnippets}}{{$value}}
+  {{end}}
+  {{- end}}
+
+  {{if .CustomerLogs }}
+  {{if .PodName }}
+    {{if .AccessLogEnabled}}
+    access_log /var/log/nginx/customerlogs/customerlogAccess_{{.PodName}}.log main {{ if .AccessLogBuffer }}buffer={{.AccessLogBuffer }}{{ end }} {{if .AccessLogFlush }}flush={{.AccessLogFlush }}{{ end }};
+    {{else}}
+    access_log /var/log/nginx/customerlogs/customerlogAccess_{{.PodName}}.log main;
+    {{end}}
+    error_log  /var/log/nginx/customerlogs/customerlogError_{{.PodName}}.log error;
+  {{end}}
+  {{end}}
+
+
+  {{ if .SnortEnabled }}
+    # Snort Upstreams
+    {{ $snortUpstream := .SnortUpstream }}
+    upstream {{$snortUpstream.Name}} {
+      {{range $server := $snortUpstream.UpstreamServers}}
+        server {{$server.Address}}:{{$server.Port}};{{end}}
+    }
+  {{ end }}
+
+  upstream iam-appid-auth {
+      server 127.0.0.1:8080;
+      server 127.0.0.1:8081;
+      server 127.0.0.1:8082;
+      keepalive 64;
+  }
+
+  include /etc/nginx/conf.d/*.conf;
+}

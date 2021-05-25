@@ -1,0 +1,68 @@
+{
+  "S0001": {
+    "code": "S0001",
+    "message": "Successfully applied ingress resource.",
+    "reason": "Success",
+    "type": "Normal"
+  },
+  "E0001": {
+    "code": "E0001",
+    "message": "Failed to apply ingress resource.",
+    "reason": "TLSSecretNotFound",
+    "type": "Warning"
+  },
+  "E0002": {
+    "code": "E0002",
+    "message": "Failed to apply ingress resource.",
+    "reason": "SSLSecretNotFound",
+    "type": "Warning"
+  },
+  "E0003": {
+    "code": "E0003",
+    "message": "Failed to apply ingress resource.",
+    "reason": "MutualAuthSecretNotFound",
+    "type": "Warning"
+  },
+  "E0004": {
+    "code": "E0004",
+    "message": "Failed to apply ingress resource.",
+    "reason": "ConfigReloadFailure",
+    "type": "Warning"
+  },
+  "E0005": {
+    "code": "E0005",
+    "message": "Failed to update tls secret for ingress.",
+    "reason": "TLSCrtNotPresent",
+    "type": "Warning"
+  },
+  "E0006": {
+    "code": "E0006",
+    "message": "Failed to update tls secret for ingress.",
+    "reason": "TLSKeyNotPresent",
+    "type": "Warning"
+  },
+  "E0007": {
+    "code": "E0007",
+    "message": "Failed to update mutual auth secret for ingress.",
+    "reason": "MutualAuthSecretNotFound",
+    "type": "Warning"
+  },
+  "E0008": {
+    "code": "E0008",
+    "message": "CA cert not found. Defaulting to tls cert for mutual auth.",
+    "reason": "MutualAuthCACrtNotFound",
+    "type": "Warning"
+  },
+  "E0009": {
+    "code": "E0009",
+    "message": "Failed to update mutual auth secret for ingress.",
+    "reason": "MutualAuthTLSCrtNotFound",
+    "type": "Warning"
+  },
+  "A0001": {
+    "code": "A0001",
+    "message": "Failed to apply annotation",
+    "reason": "AnnotationError",
+    "type": "Warning"
+  }
+}

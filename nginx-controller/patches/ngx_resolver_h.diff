@@ -1,0 +1,10 @@
+--- a/src/core/ngx_resolver.h	2018-07-09 22:11:35.000000000 -0500
++++ b/src/core/ngx_resolver.h	2018-07-09 22:21:00.000000000 -0500
+@@ -236,5 +236,7 @@
+ void ngx_resolve_addr_done(ngx_resolver_ctx_t *ctx);
+ char *ngx_resolver_strerror(ngx_int_t err);
+ 
++ngx_int_t ngx_udp_connect(ngx_resolver_connection_t *rec);
++ngx_int_t ngx_tcp_connect(ngx_resolver_connection_t *rec);
+ 
+ #endif /* _NGX_RESOLVER_H_INCLUDED_ */

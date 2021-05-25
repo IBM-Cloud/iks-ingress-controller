@@ -1,0 +1,4 @@
+export UBUNTU_REPO=http://archive.ubuntu.com/ubuntu/
+export GH_LINK=https://github.com
+export NGINX_LINK=http://nginx.org/download
+export NGINX_GOODIES_LINK=https://bitbucket.org/nginx-goodies/nginx-sticky-module-ng

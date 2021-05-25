@@ -1,0 +1,11 @@
+{{range $upstream := .Ups}}
+upstream {{$upstream.Name}} {
+	{{range $server := $upstream.UpstreamServers}}
+	server {{$server.Address}}:{{$server.Port}};{{end}}
+}{{end}}
+
+{{range $config := .StreamConfigs}}
+server {
+    listen {{$config.IngressPort}};
+    proxy_pass {{$config.ServiceName}};
+}{{end}}
