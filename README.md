@@ -12,7 +12,7 @@ Before you get started with the IBM Cloud Kubernetes Service open source Ingress
 - To be included in Ingress load balancing, the names of the `ClusterIP` services that expose your apps must be unique across all namespaces in your cluster.
 - VPC clusters: [Allow traffic requests that are routed by Ingress to node ports on your worker nodes](cloud.ibm.com/docs/containers?topic=containers-vpc-network-policy#security_groups).
 - To build on a Mac or Linux based machine, ensure Docker is running, and run `make container`.
-- This project is not officially supported by IBM for IBM Cloud Kubernetes Service clusters. You are responsible for deploying, managing, and mainatining the Ingress controllers in your cluster.
+- This project is not officially supported by IBM for IBM Cloud Kubernetes Service clusters. You are responsible for deploying, managing, and maintaining the Ingress controllers in your cluster.
 
 ## Step 1: Pushing to IBM Cloud Registry
 Push your local image to [IBM Cloud Container Registry](https://cloud.ibm.com/docs/Registry?topic=Registry-registry_overview).
