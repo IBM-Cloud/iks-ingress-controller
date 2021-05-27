@@ -5,7 +5,6 @@ The Ingress controller provided by this project can be used as-is in IBM Cloud K
 ## Prerequisites and considerations
 Before you get started with the IBM Cloud Kubernetes Service open source Ingress controller, review the following prerequisites and considerations.
 
--
 - Setting up Ingress in an IBM Cloud Kubernetes Service cluster requires the following [IBM Cloud IAM roles](cloud.ibm.com/docs/containers?topic=containers-users#platform):
     - **Administrator** platform access role for the cluster
     - **Manager** service access role in all namespaces
