@@ -1,21 +1,19 @@
 # IBM Cloud Kubernetes Service open source Ingress controller
 
-TODO short description here - do we want to mentin anything about how this is now officially unsupported so it was instead open sourced?
+The Ingress controller provided by this project can be used as-is in IBM Cloud Kubernetes Service clusters without any support from IBM. The main purpose of providing this open source Ingress controller is to allow users to continue to use the custom IBM CLoud Kubernetes Service Ingress controller after official support is ended by IBM.
 
 ## Prerequisites and considerations
 Before you get started with the IBM Cloud Kubernetes Service open source Ingress controller, review the following prerequisites and considerations.
 
-TODO: do these general IKS prereqs still apply? i would think they would for any Ingress controller in an iks cluster
-
-- Setting up Ingress requires the following [IBM Cloud IAM roles](cloud.ibm.com/docs/containers?topic=containers-users#platform):
+-
+- Setting up Ingress in an IBM Cloud Kubernetes Service cluster requires the following [IBM Cloud IAM roles](cloud.ibm.com/docs/containers?topic=containers-users#platform):
     - **Administrator** platform access role for the cluster
     - **Manager** service access role in all namespaces
 - If you restrict network traffic to edge worker nodes, ensure that at least two [edge worker nodes](cloud.ibm.com/docs/containers?topic=containers-edge) are enabled in each zone so that Ingress controllers deploy uniformly.
 - To be included in Ingress load balancing, the names of the `ClusterIP` services that expose your apps must be unique across all namespaces in your cluster.
 - VPC clusters: [Allow traffic requests that are routed by Ingress to node ports on your worker nodes](cloud.ibm.com/docs/containers?topic=containers-vpc-network-policy#security_groups).
-- To build on a Mac or Linux based machine, ensure Docker is running and run: `make container`
-
-TODO: need a warning re: this isnt support by iks, you must manage, etc
+- To build on a Mac or Linux based machine, ensure Docker is running, and run `make container`.
+- This project is not officially supported by IBM for IBM Cloud Kubernetes Service clusters. You are responsible for deploying, managing, and mainatining the Ingress controllers in your cluster.
 
 ## Step 1: Pushing to IBM Cloud Registry
 Push your local image to [IBM Cloud Container Registry](https://cloud.ibm.com/docs/Registry?topic=Registry-registry_overview).
@@ -54,7 +52,7 @@ ibmcloud ks ingress alb get -c <cluster> --alb <alb-id>
 ibmcloud ks cluster config -c <cluster>
 ```
 
-4. Modify the image reference in the `deploy.yaml` file. For example, in `sample_deploy/deploy.yaml`, replace `<image_reference>` with the location of your image, such as `<region>.icr.io/<namespace>/ingress:latest`.
+4. Modify the image reference in the `deploy.yaml` file. For example, in `sample_deployment/deploy.yaml`, replace `<image_reference>` with the location of your image, such as `<region>.icr.io/<namespace>/ingress:latest`.
 
 5. Copy the image pull secret to the `kube-system` namespace in your cluster. Because the service account for the Ingress controller sample references the default pull secret in `kube-system`, the secret must exist in the `kube-system` namespace.
 ```
@@ -62,12 +60,24 @@ kubectl get secret all-icr-io -o yaml | sed 's/namespace: .*/namespace: kube-sys
 ```
 > Note: If the `all-icr-io` secret does not exist in the `default` namespace, follow [these steps to apply it](https://cloud.ibm.com/docs/containers?topic=containers-registry#imagePullSecret_migrate_api_key).
 
-6. Apply the deployment.
+6. Optional: By default, the sample deployment creates an Ingress controller that is exposed by a public service. To create a private Ingress controller instead, modify the `sample_deployment/service.yaml` file to add the following annotation:
+  ```
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: ibm-cloud-ingress
+    namespace: kube-system
+    annotations:
+    service.kubernetes.io/ibm-load-balancer-cloud-provider-ip-type: <public_or_private>
+  ...
+  ```
+
+7. Apply the deployment.
 ```
-kubectl apply -f ./sample_deploy
+kubectl apply -f ./sample_deployment
 ```
 
-7. Ensure the Ingress controller pods are in a `Running` state.
+8. Ensure the Ingress controller pods are in a `Running` state.
 ```
 kubectl get po -n kube-system | grep ibm-cloud-ingress
 ```
@@ -75,8 +85,6 @@ kubectl get po -n kube-system | grep ibm-cloud-ingress
    ```
    kubectl describe deploy -n kube-system ibm-cloud-ingress
    ```
-
-TODO: is this always going to be a public ingress controller w a public ip address (or hostname)? or can they specify private somehow?
 
 ## Step 3: Registering a DNS subdomain
 Register the service that exposes the Ingress controller with an IBM-provided DNS subdomain or a custom domain.
@@ -92,23 +100,32 @@ kubectl get svc -n kube-system | grep ibm-cloud-ingress
     ```
     ibmcloud ks nlb-dns create classic -c <cluster> --ip <service ip address> [--namespace <namespace>]
     ```
+    Note: Currently, you cannot generate an IBM-provided subdomain for an Ingress controller that is exposed by a private service in a classic cluster. Instead, you can register a custom domain.
   - VPC:
     ```
-    ibmcloud ks nlb-dns create vpc-gen2 -c <cluster> --lb-host <lb hostname> [--namespace <namespace>]
+    ibmcloud ks nlb-dns create vpc-gen2 -c <cluster> --lb-host <lb hostname> [--namespace <namespace>] [--type (public|private)]
     ```
-TODO: if they can create a private controller, can include  --type private for vpc or set up a private dns resolution svc for classic ("Classic clusters with worker nodes that are connected to [a private VLAN only](cloud.ibm.com/docs/containers?topic=containers-cs_network_planning#plan_private_vlan): Configure a [DNS service that is available on the private network](https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/).")
 
 3. Optional: Register a custom domain by working with your DNS provider and define an alias by specifying the IBM-provided subdomain as a Canonical Name record (CNAME).
 
 ### Custom domain
 Alternatively, you can work with your DNS provider to register a custom domain for your service's IP address (classic) or VPC LB hostname (VPC), and use your own TLS certificate to manage TLS termination.
 
-If a TLS certificate is stored in IBM Cloud Certificate Manager that you want to use, you can import its associated secret into your cluster by running the following command. If you do not specify a namespace, the certificate secret is created in a namespace called `ibm-cert-store`. A reference to this secret is then created in the `default` namespace, which any Ingress resource in any namespace can access. When the Ingress controller is processing requests, it follows this reference to pick up and use the certificate secret from the `ibm-cert-store` namespace. Note that TLS certificates that contain pre-shared keys (TLS-PSK) are not supported.
+1. Get the ingress controller service's IP address (classic clusters) or VPC load balancer hostname (VPC clusters). The IP or hostname is the 4th column of the output.
+```
+kubectl get svc -n kube-system | grep ibm-cloud-ingress
+```
+
+2. Register a custom domain for your service's IP address (classic) or VPC LB hostname (VPC) by working with your DNS provider.
+
+3. To process HTTPS requests, choose from the following options for using a TLS certificate for your domain.
+
+**Certificate stored in IBM Cloud Certificate Manager**: If you store a TLS certificate for your domain in IBM Cloud Certificate Manager, you can import its associated secret into your cluster by running the following command. If you do not specify a namespace, the certificate secret is created in a namespace called `ibm-cert-store`. A reference to this secret is then created in the `default` namespace, which any Ingress resource in any namespace can access. When the Ingress controller is processing requests, it follows this reference to pick up and use the certificate secret from the `ibm-cert-store` namespace. Note that TLS certificates that contain pre-shared keys (TLS-PSK) are not supported.
 ```
 ibmcloud ks ingress secret create --name <secret_name> --cluster <cluster_name_or_ID> --cert-crn <certificate_crn> [--namespace <namespace>]
 ```
 
-If you do not have a TLS certificate ready, you can follow these steps:
+**Create a secret for a certificate**: If you do not have a TLS certificate ready, you can follow these steps:
 1. Generate a certificate authority (CA) cert and key from your certificate provider. If you have your own domain, purchase an official TLS certificate for your domain. Make sure the [CN](https://support.dnsimple.com/articles/what-is-common-name/) is different for each certificate. **Note:** If you cannot get a certificate from a CA, you can create a self-signed certificate for testing purposes by using OpenSSL. For more information, see this [self-signed SSL certificate tutorial](https://www.akadia.com/services/ssh_test_certificate.html).
   1. Create a `tls.key`.
     ```
@@ -282,9 +299,6 @@ https://<domain>/<app_path>
 
 ## Planning networking for single or multiple namespaces
 
-
-TODO is this still valid? Im assuming yes
-
 One Ingress resource is required per namespace where you have apps that you want to expose.
 
 ### All apps are in one namespace
@@ -325,8 +339,6 @@ If you want to use a wildcard custom domain, you must register the custom domain
 ## Adding annotations
 
 To add capabilities to your Ingress controller, you can specify annotations as metadata in an Ingress resource.
-
-TODO are all of these annotations still going to be valid?
 
 |General annotations|Name|Description|
 |-------------------|----|-----------|
@@ -2162,8 +2174,6 @@ spec:
 
 ## Opening non-default ports in the Ingress controller
 
-TODO is this still valid?
-
 1. Edit the YAML file for the `ibm-cloud-provider-ingress-cm` configmap.
 ```
 kubectl edit cm ibm-cloud-provider-ingress-cm -n kube-system
@@ -2195,9 +2205,6 @@ kubectl get cm ibm-cloud-provider-ingress-cm -n kube-system -o yaml
 
 
 ## Increasing the restart readiness check time for Ingress controller pods
-
-
-TODO is this still valid?
 
 Increase the amount of time that Ingress controller pods have to parse large Ingress resource files when the Ingress controller pods restart.
 
