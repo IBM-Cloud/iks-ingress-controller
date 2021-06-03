@@ -60,14 +60,14 @@ kubectl get secret all-icr-io -o yaml | sed 's/namespace: .*/namespace: kube-sys
 > Note: If the `all-icr-io` secret does not exist in the `default` namespace, follow [these steps to apply it](https://cloud.ibm.com/docs/containers?topic=containers-registry#imagePullSecret_migrate_api_key).
 
 6. Optional: By default, the sample deployment creates an Ingress controller that is exposed by a public service. To create a private Ingress controller instead, modify the `sample_deployment/service.yaml` file to add the following annotation:
-  ```
+  ```yaml
   apiVersion: v1
   kind: Service
   metadata:
     name: ibm-cloud-ingress
     namespace: kube-system
     annotations:
-    service.kubernetes.io/ibm-load-balancer-cloud-provider-ip-type: <public_or_private>
+      service.kubernetes.io/ibm-load-balancer-cloud-provider-ip-type: <public_or_private>
   ...
   ```
 
@@ -200,7 +200,7 @@ spec:
 |---|---|
 |`tls.hosts` and `host`|To use TLS, replace `<domain>` with the IBM-provided DNS subdomain or your custom domain. Note: <ul><li>If your apps are exposed by services in different namespaces in one cluster, add a wildcard subdomain to the beginning of the domain, such as `subdomain1.custom_domain.net` or `subdomain1.mycluster-<hash>-0000.us-south.containers.appdomain.cloud`. Use a unique subdomain for each resource that you create in the cluster.</li><li>Do not use `*` for your host or leave the host property empty to avoid failures during Ingress creation.</li></ul>|
 |`tls.secretName`|Replace `<tls_secret_name>` with the secret that you created earlier that holds your custom TLS certificate and key.|
-|`path`|Replace `<app_path>` with a slash or the path that your app is listening on. The path is appended to the IBM-provided or your custom domain to create a unique route to your app. When you enter this route into a web browser, network traffic is routed to the Ingress controller. The Ingress controller looks up the associated service and sends network traffic to the service. The service then forwards the traffic to the pods where the app runs. Note: Many apps do not listen on a specific path, but use the root path and a specific port. In this case, define the root path as `/` and do not specify an individual path for your app. Examples: <ul><li>For `http://domain/`, enter `/` as the path.</li><li>For `http://domain/app1_path`, enter `/app1_path` as the path.</li></ul> Tip: To configure Ingress to listen on a path that is different than the path that your app listens on, you can use the rewrite annotation.|
+|`path`|Replace `<app_path>` with a slash or the path that your app is listening on. The path is appended to the IBM-provided or your custom domain to create a unique route to your app. When you enter this route into a web browser, network traffic is routed to the Ingress controller. The Ingress controller looks up the associated service and sends network traffic to the service. The service then forwards the traffic to the pods where the app runs. Note: Many apps do not listen on a specific path, but use the root path and a specific port. In this case, define the root path as `/` and do not specify an individual path for your app. Examples: <ul><li>For `http://domain/`, enter `/` as the path.</li><li>For `http://domain/app1_path`, enter `/app1_path` as the path.</li></ul> Tip: To configure Ingress to listen on a path that is different than the path that your app listens on, you can use the [rewrite annotation](/docs/annotations.md#rewrite-paths-rewrite-path).|
 |`service.name`|Replace `<app1_service>` and `<app2_service>`, and so on, with the name of the services you created to expose your apps. If your apps are exposed by services in different namespaces in the cluster, include only app services that are in the same namespace. You must create one Ingress resource for each namespace where you have apps that you want to expose.|
 |`service.port.number`|The port that your service listens to. Use the same port that you defined when you created the Kubernetes service for your app.|
 

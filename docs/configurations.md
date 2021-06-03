@@ -30,8 +30,8 @@ kubectl get cm ibm-cloud-provider-ingress-cm -n kube-system -o yaml
 ```
 
 5. Optional:
-  * Access an app via a non-standard TCP port that you opened by using the `tcp-ports` annotation.
-  * Change the default ports for HTTP (port 80) and HTTPS (port 443) network traffic to a port that you opened by using the `custom-port` annotation.
+  * Access an app via a non-standard TCP port that you opened by using the [`tcp-ports` annotation](/docs/annotations.md#tcp-ports-tcp-ports).
+  * Change the default ports for HTTP (port 80) and HTTPS (port 443) network traffic to a port that you opened by using the [`custom-port` annotation](/docs/annotations.md#custom-http-and-https-ports-custom-port).
 
 ## Increasing the restart readiness check time for Ingress controller pods
 
