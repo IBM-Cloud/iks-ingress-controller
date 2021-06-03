@@ -269,7 +269,6 @@ kubectl apply -f myexternalendpoint.yaml
 
 ### Exposing external apps through the `proxy-external-service` Ingress annotation
 
-
 Route requests through the Ingress controller to your external service by using the `proxy-external-service` annotation in your Ingress resource file.
 
 1. Create an Ingress resource file that is named, for example, `myingressresource.yaml`. Replace `<mypath>` with the path that the external service listens on, `<external_service>` with the external service to be called (e.g., `https://<myservice>.<region>.appdomain.com`), and `<dns_subdomain>` with the DNS subdomain for your cluster or the custom domain that you set up.
@@ -301,13 +300,11 @@ One Ingress resource is required per namespace where you have apps that you want
 
 ### All apps are in one namespace
 
-
 If the apps in your cluster are all in the same namespace, one Ingress resource is required to define routing rules for the apps that are exposed there.
 
 For example, if you have `app1` and `app2` exposed by services in a development namespace, you can create an Ingress resource in the namespace. The resource specifies `domain.net` as the host and registers the paths that each app listens on with `domain.net`.
 
 ### Apps are in multiple namespaces
-
 
 If the apps in your cluster are in different namespaces, you must create one resource per namespace to define rules for the apps that are exposed there.
 
@@ -328,7 +325,6 @@ Now, both URLs resolve to the same domain and are thus both serviced by the same
 If you want to use a wildcard custom domain, you must register the custom domain as a wildcard domain such as `*.custom_domain.net`, and to use TLS, you must get a wildcard certificate.
 
 ### Multiple domains within a namespace
-
 
 Within an individual namespace, you can use one domain to access all the apps in the namespace. If you want to use different domains for the apps within an individual namespace, use a wildcard domain. When a wildcard domain such as `*.mycluster-<hash>-0000.us-south.containers.appdomain.cloud` is registered, multiple subdomains all resolve to the same host. Then, you can use one resource to specify multiple subdomain hosts within that resource. Alternatively, you can create multiple Ingress resources in the namespace and specify a different subdomain in each Ingress resource.
 

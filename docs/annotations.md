@@ -308,8 +308,6 @@ spec:
           servicePort: 8080
 ```
 
-
-
 |Annotation field|Value|
 |----------------|-----|
 | `serviceName` | Replace `<myservice>` with the name of the Kubernetes service that you created for your app. This parameter is optional. The configuration is applied to all of the services in the Ingress subdomain unless a service is specified. If the parameter is provided, the keepalive requests are set for the given service. If the parameter is not provided, the keepalive requests are set at the server level of the `nginx.conf` for all the services that do not have the keepalive requests configured. |
@@ -344,8 +342,6 @@ spec:
          serviceName: myservice
          servicePort: 8080
 ```
-
-
 
 |Annotation field|Value|
 |----------------|-----|
@@ -386,8 +382,6 @@ spec:
           servicePort: 80
 ```
 
-
-
 |Annotation field|Value|
 |----------------|-----|
 | `serviceName` | Replace `<myservice>` with the name of the Kubernetes service that you created for your app. |
@@ -410,7 +404,6 @@ For high availability, some app setups require you to deploy multiple upstream s
 Every client that connects to your back-end app is assigned to one of the available upstream servers by the Ingress controller. The Ingress controller creates a session cookie that is stored in the client's app, which is included in the header information of every request between the Ingress controller and the client. The information in the cookie ensures that all requests are handled by the same upstream server throughout the session.
 
 Relying on sticky sessions can add complexity and reduce your availability. For example, you might have an HTTP server that maintains some session state for an initial connection so that the HTTP service accepts only subsequent requests with the same session state value. However, this prevents easy horizontal scaling of the HTTP service. Consider using an external database, such as Redis or Memcached, to store the HTTP request session value so that you can maintain the session state across multiple servers.
-
 
 When you include multiple services, use a semi-colon (;) to separate them.
 
@@ -441,8 +434,6 @@ spec:
           serviceName: <myservice2>
           servicePort: 80
 ```
-
-
 
 |Annotation field|Value|
 |----------------|-----|
@@ -523,8 +514,6 @@ spec:
           servicePort: 8080
 ```
 
-
-
 |Annotation field|Value|
 |----------------|-----|
 | `serviceName` | Replace `<myservice>` with the name of the Kubernetes service that you created for your app. |
@@ -559,8 +548,6 @@ spec:
          serviceName: myservice
          servicePort: 8080
 ```
-
-
 
 |Annotation field|Value|
 |----------------|-----|
@@ -649,12 +636,10 @@ spec:
   kubectl get service -n kube-system
   ```
 
-
 2. Open the Ingress controller config map.
   ```
   kubectl edit configmap ibm-cloud-provider-ingress-cm -n kube-system
   ```
-
 
 3. Add the non-default HTTP and HTTPS ports to the config map. Replace `<port>` with the HTTP or HTTPS port that you want to open. Note: By default, ports 80 and 443 are open. If you want to keep 80 and 443 open, you must also include them in addition to any other TCP ports you specify in the `public-ports` field. If you enabled a private Ingress controller, you must also specify any ports you want to keep open in the `private-ports` field. For more information, see [Opening non-default ports in the Ingress controller](/docs/configurations.md#opening-non-default-ports-in-the-ingress-controller).
   ```yaml
@@ -671,7 +656,6 @@ spec:
     uid: <uid>
   ```
 
-
 4. Verify that your Ingress controller is reconfigured with the non-default ports.
   ```
   kubectl get service -n kube-system
@@ -683,10 +667,7 @@ spec:
   kubectl apply -f myingress.yaml
   ```
 
-
 7. Open your preferred web browser to access your app. Example: `https://<ibmdomain>:<port>/<service_path>/`
-
-
 
 ## HTTP redirects to HTTPS (`redirect-to-https`)
 
@@ -695,7 +676,6 @@ Convert insecure HTTP client requests to HTTPS.
 **Description**
 
 You set up your Ingress controller to secure your domain with the IBM-provided TLS certificate or your custom TLS certificate. Some users might try to access your apps by using an insecure `http` request to your Ingress controller domain, for example `http://www.myingress.com`, instead of using `https`. You can use the redirect annotation to always convert insecure HTTP requests to HTTPS. If you do not use this annotation, insecure HTTP requests are not converted into HTTPS requests by default and might expose unencrypted confidential information to the public.
-
 
 Redirecting HTTP requests to HTTPS is disabled by default.
 
@@ -775,9 +755,7 @@ Use the `mutual-auth` annotation for SSL termination between the client and the 
 
 The mutual authentication annotation validates client certificates. To forward client certificates in a header for the applications to handle authorization, you can use the following `proxy-add-headers` annotation: `"ingress.bluemix.net/proxy-add-headers": "serviceName=router-set {\n X-Forwarded-Client-Cert $ssl_client_escaped_cert;\n}\n"`
 
-
 **Pre-requisites**
-
 
 * You must have a valid mutual authentication secret that contains the required `ca.crt`. To create a mutual authentication secret, see the steps at the end of this section.
 * To enable mutual authentication on a port other than 443, see [Opening non-default ports in the Ingress controller](/docs/configurations.md#opening-non-default-ports-in-the-ingress-controller) to configure the Ingress controller to open the valid port, and then specify that port in this annotation. Do not use the `custom-port` annotation to specify a port for mutual authentication.
@@ -895,16 +873,12 @@ spec:
      trusted.crt: <ca_certificate>
    ```
 
-
    To also enforce mutual authentication for upstream traffic, you can provide a `client.crt` and `client.key` in addition to the `trusted.crt` in the data section.
-
 
 4. Create a Kubernetes secret for your certificate.
    ```
    kubectl apply -f ssl-my-test
    ```
-
-
 
 **To create a mutual authentication secret:**
 
@@ -998,7 +972,6 @@ kubectl edit configmap ibm-cloud-provider-ingress-cm -n kube-system
     uid: <uid>
    ```
 
-
 4. Verify that your Ingress controller is re-configured with the TCP ports.
   ```
   kubectl get service -n kube-system
@@ -1011,7 +984,6 @@ kubectl edit configmap ibm-cloud-provider-ingress-cm -n kube-system
   kubectl apply -f myingress.yaml
   ```
 
-
 7. Curl the Ingress subdomain to access your app. Example: `curl <domain>:<ingressPort>`
 
 ## External services (`proxy-external-service`)
@@ -1023,7 +995,6 @@ Add path definitions to external services, such as services hosted in IBM Cloud.
 Add path definitions to external services. Use this annotation only when your app operates on an external service instead of a back-end service, and you want to route requests to that external service through the Ingress subdomain or custom subdomain that you specify. When you use this annotation to create an external service route, only `client-max-body-size`, `proxy-read-timeout`, `proxy-connect-timeout`, and `proxy-buffering` annotations are supported in conjunction. Any other annotations are not supported in conjunction with `proxy-external-service`.
 
 You cannot specify multiple hosts for a single service and path.
-
 
 Looking to forward requests to the IP address of your external service instead of routing requests through the Ingress controller? See [Exposing external apps through a Kubernetes endpoint](/docs/installation.md#exposing-external-apps-through-a-kubernetes-endpoint).
 
@@ -1058,7 +1029,6 @@ By default, Ingress controllers process the paths that apps listen on as prefixe
 The `location-modifier` annotation changes the way the Ingress controller searches for matches by modifying the location block configuration. The location block determines how requests are handled for the app path.
 
 To handle regular expression (regex) paths, this annotation is required.
-
 
 |Modifier|Description|
 |--------|-----------|
@@ -1373,8 +1343,6 @@ The Ingress controller acts as a proxy between the client app and your back-end 
 
 If your back-end app requires HTTP header information, you can use the `proxy-add-headers` annotation to add header information to the client request before the request is forwarded by the Ingress controller to the back-end app. If the client web app requires HTTP header information, you can use the `response-add-headers` annotation to add header information to the response before the response is forwarded by the Ingress controller to the client web app.<br>
 
-
-
 The `response-add-headers` annotation does not support global headers for all services. To add a header for all service responses at a server level, you can use the `server-snippets` annotation:
 
 ```yaml
@@ -1382,8 +1350,6 @@ annotations:
   ingress.bluemix.net/server-snippets: |
     add_header <header1> <value1>;
 ```
-
-
 
 **Sample Ingress resource YAML**
 
@@ -1632,7 +1598,6 @@ Because the app uses App ID for authentication, you must provision an App ID ins
 
     IBM Cloud App ID offers a logout function: If `/logout` exists in your IBM Cloud App ID path, cookies are removed and the user is sent back to the login page. To use this function, you must append `/appid_logout` to your domain in the format `https://<hostname>/<app_path>/appid_logout` and include this URL in the redirect URLs list.
 
-
 3. Bind the App ID service instance to your cluster. The command creates a service key for the service instance, or you can include the `--key` flag to use existing service key credentials.
   ```
   ibmcloud ks cluster service bind --cluster <cluster_name_or_ID> --namespace <namespace> --service <service_instance_name> [--key <service_instance_key>]
@@ -1647,12 +1612,10 @@ Because the app uses App ID for authentication, you must provision an App ID ins
   Secret name:  binding-<service_instance_name>
   ```
 
-
 4. Get the secret that was created in your cluster namespace.
   ```
   kubectl get secrets --namespace=<namespace>
   ```
-
 
 5. Use the bind secret and the cluster namespace to add the `appid-auth` annotation to your Ingress resource.
 

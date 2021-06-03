@@ -33,7 +33,6 @@ kubectl get cm ibm-cloud-provider-ingress-cm -n kube-system -o yaml
   * Access an app via a non-standard TCP port that you opened by using the `tcp-ports` annotation.
   * Change the default ports for HTTP (port 80) and HTTPS (port 443) network traffic to a port that you opened by using the `custom-port` annotation.
 
-
 ## Increasing the restart readiness check time for Ingress controller pods
 
 Increase the amount of time that Ingress controller pods have to parse large Ingress resource files when the Ingress controller pods restart.
@@ -67,12 +66,9 @@ kubectl get cm ibm-cloud-provider-ingress-cm -n kube-system -o yaml
 
 ## Preserving the source IP address
 
-
 By default, the source IP addresses of client requests are not preserved by the Ingress controller. To preserve source IP addresses, you can enable the PROXY protocol in VPC clusters or change the `externalTrafficPolicy` in classic clusters.
 
-
 ### Enabling the PROXY protocol in VPC clusters
-
 
 To preserve the source IP address of the client request in a VPC cluster, you can enable the [NGINX PROXY protocol](https://docs.nginx.com/nginx/admin-guide/load-balancer/using-proxy-protocol/) for all load balancers that expose Ingress controllers in your cluster.
 
@@ -88,18 +84,14 @@ ibmcloud ks ingress lb proxy-protocol enable --cluster <cluster_name_or_ID>
 ibmcloud ks ingress lb get --cluster <cluster_name_or_ID>
 ```
 
-
 3. To later disable the PROXY protocol, you can run the following command:
 ```
 ibmcloud ks ingress lb proxy-protocol disable --cluster <cluster_name_or_ID>
 ```
 
-
 ### Changing the `externalTrafficPolicy` in classic clusters
 
-
 Preserve the source IP address for client requests in a classic cluster.
-
 
 By default, the source IP address of the client request is not preserved. When a client request to your app is sent to your cluster, the request is routed to a pod for the load balancer service that exposes the Ingress controller. If no app pod exists on the same worker node as the load balancer service pod, the load balancer forwards the request to an app pod on a different worker node. The source IP address of the package is changed to the public IP address of the worker node where the app pod runs.
 
@@ -115,7 +107,6 @@ Note: When source IP preservation is enabled, load balancers shift from forwardi
       kubectl get svc -n kube-system
       ```
 
-
   2. Open the YAML for the service that exposes the Ingress controller.
       ```
       kubectl edit svc <svc> -n kube-system
@@ -125,19 +116,16 @@ Note: When source IP preservation is enabled, load balancers shift from forwardi
 
   4. Save and close the configuration file.
 
-
 2. Verify that the source IP is being preserved in your Ingress controller pods logs.
   1. Get the ID of a pod for the Ingress controller that you modified.
       ```
       kubectl get pods -n kube-system
       ```
 
-
   2. Open the logs for that Ingress controller pod. Verify that the IP address for the `client` field is the client request IP address instead of the load balancer service IP address.
       ```
       kubectl logs <Ingress controller_pod_ID> nginx-ingress -n kube-system
       ```
-
 
 3. Now, when you look up the headers for the requests that are sent to your back-end app, you can see the client IP address in the `x-forwarded-for` header.
 
@@ -145,9 +133,7 @@ Note: When source IP preservation is enabled, load balancers shift from forwardi
 
 ## Configuring SSL protocols and SSL ciphers at the HTTP level
 
-
 Enable SSL protocols and ciphers at the global HTTP level by editing the `ibm-cloud-provider-ingress-cm` configmap.
-
 
 For example, if you still have legacy clients that require TLS 1.0 or 1.1 support, you must manually enable these TLS versions to override the default setting of TLS 1.2 and TLS 1.3 only. For more information about how to see the TLS versions that your clients use to access your apps, see this [{{site.data.keyword.cloud_notm}} blog post](https://www.ibm.com/cloud/blog/ibm-cloud-kubernetes-service-alb-update-tls-1-0-and-1-1-disabled-by-default).
 
@@ -162,7 +148,6 @@ To edit the configmap to enable SSL protocols and ciphers:
   kubectl edit cm ibm-cloud-provider-ingress-cm -n kube-system
   ```
 
-
 2. Add the SSL protocols and ciphers. Format ciphers according to the [OpenSSL library cipher list format](https://www.openssl.org/docs/man1.0.2/man1/ciphers.html).
 
  ```yaml
@@ -176,7 +161,6 @@ To edit the configmap to enable SSL protocols and ciphers:
    namespace: kube-system
  ```
 
-
 3. Save the configuration file.
 
 4. Verify that the configmap changes were applied. The changes are applied to your Ingress controllers automatically.
@@ -187,9 +171,7 @@ To edit the configmap to enable SSL protocols and ciphers:
 
 ## Adding Ingress controller socket listeners for each NGINX worker process
 
-
 Increase the number of socket listeners from one socket listener for each Ingress controller to one socket listener for each NGINX worker process for that Ingress controller by using the `reuse-port` Ingress directive.
-
 
 When the `reuse-port` option is disabled, a single listening socket notifies an Ingress controller about incoming connections, and all NGINX worker processes for that Ingress controller attempt to take the connection. But when `reuse-port` is enabled, one socket listener exists for each worker process. Instead of each worker process attempting to take the connection, the Linux kernel determines which available socket listener gets the connection. Lock contention between workers is reduced, which can improve performance. For more information about the benefits and drawbacks of the `reuse-port` directive, see [this NGINX blog post](https://www.nginx.com/blog/socket-sharding-nginx-release-1-9-1/).
 
@@ -197,7 +179,6 @@ When the `reuse-port` option is disabled, a single listening socket notifies an 
     ```
     kubectl edit cm ibm-cloud-provider-ingress-cm -n kube-system
     ```
-
 
 2. In the `data` section, add `reuse-port: "true"`. Example:
    ```yaml
@@ -209,7 +190,6 @@ When the `reuse-port` option is disabled, a single listening socket notifies an 
    ...
    ```
 
-
 3. Save the configuration file.
 
 4. Verify that the configmap changes were applied. The changes are applied to your Ingress controllers automatically.
@@ -218,19 +198,15 @@ When the `reuse-port` option is disabled, a single listening socket notifies an 
    kubectl get cm ibm-cloud-provider-ingress-cm -n kube-system -o yaml
    ```
 
-
 ## Enabling log buffering and flush timeout
 
-
 By default, the Ingress controller logs each request as it arrives. If you have an environment that is heavily used, logging each request as it arrives can greatly increase disk I/O utilization. To avoid continuous disk I/O, you can enable log buffering and flush timeout for the Ingress controller by editing the `ibm-cloud-provider-ingress-cm` Ingress configmap. When buffering is enabled, instead of performing a separate write operation for each log entry, the Ingress controller buffers a series of entries and writes them to the file together in a single operation.
-
 
 1. Create and edit the configuration file for the `ibm-cloud-provider-ingress-cm` configmap resource.
 
     ```
     kubectl edit cm ibm-cloud-provider-ingress-cm -n kube-system
     ```
-
 
 2. Edit the configmap.
     1. Enable log buffering by adding the `access-log-buffering` field and setting it to `"true"`.
@@ -252,7 +228,6 @@ By default, the Ingress controller logs each request as it arrives. If you have 
         ...
       ```
 
-
 3. Save the configuration file.
 
 4. Verify that the logs for an Ingress controller now contain buffered content that is written according to the memory size or time interval you set.
@@ -261,19 +236,15 @@ By default, the Ingress controller logs each request as it arrives. If you have 
    kubectl logs -n kube-system <svc> -c nginx-ingress
    ```
 
-
 ## Changing the number or duration of keepalive connections
 
-
 Keepalive connections can have a major impact on performance by reducing the CPU and network usage that is needed to open and close connections. To optimize the performance of your Ingress controllers, you can change the maximum number of keepalive connections between the Ingress controller and the client and how long the keepalive connections can last.
-
 
 1. Edit the configuration file for the `ibm-cloud-provider-ingress-cm` configmap resource.
 
     ```
     kubectl edit cm ibm-cloud-provider-ingress-cm -n kube-system
     ```
-
 
 2. Change the values of `keep-alive-requests` and `keep-alive`.
     * `keep-alive-requests`: The number of keepalive client connections that can stay open to the Ingress controller. The default is `4096`.
@@ -289,7 +260,6 @@ Keepalive connections can have a major impact on performance by reducing the CPU
      namespace: kube-system
    ```
 
-
 3. Save the configuration file.
 
 4. Verify that the configmap changes were applied. The changes are applied to your Ingress controllers automatically.
@@ -298,12 +268,9 @@ Keepalive connections can have a major impact on performance by reducing the CPU
    kubectl get cm ibm-cloud-provider-ingress-cm -n kube-system -o yaml
    ```
 
-
 ## Changing the pending connections backlog
 
-
 You can decrease the default backlog setting for how many pending connections can wait in the server queue.
-
 
 In the `ibm-cloud-provider-ingress-cm` Ingress configmap, the `backlog` field sets the maximum number of pending connections that can wait in the server queue. By default, `backlog` is set to `32768`. You can override the default by editing the Ingress configmap.
 
@@ -312,7 +279,6 @@ In the `ibm-cloud-provider-ingress-cm` Ingress configmap, the `backlog` field se
     ```
     kubectl edit cm ibm-cloud-provider-ingress-cm -n kube-system
     ```
-
 
 2. Change the value of `backlog` from `32768` to a lower value. The value must be equal to or lesser than 32768.
 
@@ -325,7 +291,6 @@ In the `ibm-cloud-provider-ingress-cm` Ingress configmap, the `backlog` field se
      name: ibm-cloud-provider-ingress-cm
      namespace: kube-system
    ```
-
 
 3. Save the configuration file.
 
