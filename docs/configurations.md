@@ -68,7 +68,7 @@ kubectl get cm ibm-cloud-provider-ingress-cm -n kube-system -o yaml
 
 By default, the source IP addresses of client requests are not preserved by the Ingress controller. To preserve source IP addresses, you can enable the PROXY protocol in VPC clusters or change the `externalTrafficPolicy` in classic clusters.
 
-### Enabling the PROXY protocol in VPC clusters
+### VPC clusters: Enabling the PROXY protocol
 
 To preserve the source IP address of the client request in a VPC cluster, you can enable the [NGINX PROXY protocol](https://docs.nginx.com/nginx/admin-guide/load-balancer/using-proxy-protocol/) for all load balancers that expose Ingress controllers in your cluster.
 
@@ -89,7 +89,7 @@ ibmcloud ks ingress lb get --cluster <cluster_name_or_ID>
 ibmcloud ks ingress lb proxy-protocol disable --cluster <cluster_name_or_ID>
 ```
 
-### Changing the `externalTrafficPolicy` in classic clusters
+### Classic clusters: Changing the `externalTrafficPolicy`
 
 Preserve the source IP address for client requests in a classic cluster.
 

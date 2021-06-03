@@ -9,27 +9,27 @@ Add capabilities to your Ingress controller by specifying annotations as metadat
 | Custom error actions | `custom-errors, custom-error-actions` | Indicate custom actions that the Ingress controller can take for specific HTTP errors. |
 | Location snippets | `location-snippets` | Add a custom location block configuration for a service. |
 | Server snippets | `server-snippets` | Add a custom server block configuration. |
-| {{site.data.keyword.appid_short}} Authentication | `appid-auth` | Use IBM Cloud App ID to authenticate with your app. |
+| App ID authentication | `appid-auth` | Use IBM Cloud App ID to authenticate with your app. |
 
 **Connection annotations**: Change how the Ingress controller connects to the back-end app and upstream-servers, and set timeouts or a maximum number of keepalive connections before the app or server is considered to be unavailable.
 
 |Connection annotations|Name|Description|
 |----------------------|----|-----------|
-| Custom connect-timeouts and read-timeouts | `proxy-connect-timeout, proxy-read-timeout` | Set the time that the Ingress controller waits to connect to and read from the back-end app before the back-end app is considered unavailable. |
+| Custom connect and read timeouts | `proxy-connect-timeout, proxy-read-timeout` | Set the time that the Ingress controller waits to connect to and read from the back-end app before the back-end app is considered unavailable. |
 | Keepalive requests | `keepalive-requests` | Set the maximum number of requests that can be served through one keepalive connection. |
 | Keepalive timeout | `keepalive-timeout` | Set the maximum time that a keepalive connection stays open between the client and the Ingress controller proxy server. |
 | Proxy next upstream | `proxy-next-upstream-config` | Set when the Ingress controller can pass a request to the next upstream server. |
-| Session-affinity with cookies | `sticky-cookie-services` | Always route incoming network traffic to the same upstream server by using a sticky cookie. |
-| Upstream fail timeout | `upstream-fail-timeout` | Set the amount of time during which the Ingress controller can attempt to connect to the server before the server is considered unavailable. |
-| Upstream keepalive | `upstream-keepalive` | Set the maximum number of idle keepalive connections for an upstream server. |
+| Session affinity with cookies | `sticky-cookie-services` | Always route incoming network traffic to the same upstream server by using a sticky cookie. |
+| Upstream failure timeout | `upstream-fail-timeout` | Set the amount of time during which the Ingress controller can attempt to connect to the server before the server is considered unavailable. |
+| Upstream keepalive connections | `upstream-keepalive` | Set the maximum number of idle keepalive connections for an upstream server. |
 | Upstream keepalive timeout | `upstream-keepalive-timeout` | Set the maximum time that a keepalive connection stays open between the Ingress controller proxy server and your app's upstream server. |
-| Upstream max fails | `upstream-max-fails` | Set the maximum number of unsuccessful attempts to communicate with the server before the server is considered unavailable. |
+| Upstream max failures | `upstream-max-fails` | Set the maximum number of unsuccessful attempts to communicate with the server before the server is considered unavailable. |
 
 **HTTPS and TLS/SSL authentication annotations**: Configure your Ingress controller for HTTPS traffic, change default HTTPS ports, enable SSL encryption for traffic that is sent to your back-end apps, or set up mutual authentication.
 
 |HTTPS and TLS/SSL authentication annotations|Name|Description|
 |--------------------------------------------|----|-----------|
-| Custom HTTP and HTTPS ports] network traffic. |
+| Custom HTTP and HTTPS ports | `custom-port` | Change the default ports for HTTP (port 80) and HTTPS (port 443) network traffic. |
 | HTTP redirects to HTTPS | `redirect-to-https` | Redirect insecure HTTP requests on your domain to HTTPS. |
 | HTTP Strict Transport Security (HSTS) | `hsts` | Set the browser to access the domain only by using HTTPS. |
 | Mutual authentication | `mutual-auth` | Configure mutual authentication for the Ingress controller. |
@@ -231,6 +231,93 @@ annotations:
   ingress.bluemix.net/server-snippets: |
     add_header <header1> <value1>;
 ```
+
+## App ID Authentication (`appid-auth`)
+
+Use IBM Cloud App ID to authenticate with your app.
+
+**Description**
+
+Authenticate web or API HTTP/HTTPS requests with App ID.
+
+If you set the request type to web, a web request that contains an App ID access token is validated. If token validation fails, the web request is rejected. If the request does not contain an access token, then the request is redirected to the App ID login page. For App ID web authentication to work, cookies must be enabled in the user's browser.
+
+If you set the request type to api, an API request that contains an App ID access token is validated. If the request does not contain an access token, a 401: Unauthorized error message is returned to the user.
+
+For security reasons, App ID authentication supports only back ends with TLS/SSL enabled.
+
+**Usage**
+
+Because the app uses App ID for authentication, you must provision an App ID instance, configure the instance with valid redirect URIs, and generate a bind secret by binding the instance to your cluster.
+
+1. Choose an existing or create a new App ID instance.
+  * To use an existing instance, ensure that the service instance name doesn't contain spaces. To remove spaces, select the more options menu next to the name of your service instance and select **Rename service**.
+  * To provision a [new App ID instance](https://cloud.ibm.com/catalog/services/app-id):
+      1. Replace the auto-filled **Service name** with your own unique name for the service instance. The service instance name can't contain spaces.
+      2. Choose the same region that your cluster is deployed in.
+      3. Click **Create**.
+
+2. Add redirect URLs for your app. A redirect URL is the callback endpoint of your app. To prevent phishing attacks, IBM Cloud App ID validates the request URL against the allowlist of redirect URLs.
+  1. In the App ID management console, navigate to **Manage Authentication**.
+  2. In the **Identity providers** tab, make sure that you have an Identity Provider selected. If no Identity Provider is selected, the user will not be authenticated but will be issued an access token for anonymous access to the app.
+  3. In the **Authentication settings** tab, add redirect URLs for your app in the format `http://<hostname>/<app_path>/appid_callback` or `https://<hostname>/<app_path>/appid_callback`.
+
+    IBM Cloud App ID offers a logout function: If `/logout` exists in your IBM Cloud App ID path, cookies are removed and the user is sent back to the login page. To use this function, you must append `/appid_logout` to your domain in the format `https://<hostname>/<app_path>/appid_logout` and include this URL in the redirect URLs list.
+
+3. Bind the App ID service instance to your cluster. The command creates a service key for the service instance, or you can include the `--key` flag to use existing service key credentials.
+  ```
+  ibmcloud ks cluster service bind --cluster <cluster_name_or_ID> --namespace <namespace> --service <service_instance_name> [--key <service_instance_key>]
+  ```
+
+  When the service is successfully added to your cluster, a cluster secret is created that holds the credentials of your service instance. Example CLI output:
+  ```
+  ibmcloud ks cluster service bind --cluster mycluster --namespace mynamespace --service appid1
+  Binding service instance to namespace...
+  OK
+  Namespace:    mynamespace
+  Secret name:  binding-<service_instance_name>
+  ```
+
+4. Get the secret that was created in your cluster namespace.
+  ```
+  kubectl get secrets --namespace=<namespace>
+  ```
+
+5. Use the bind secret and the cluster namespace to add the `appid-auth` annotation to your Ingress resource.
+
+When you use the bind secret in the `appid-auth` annotation, the secret is cached by the Ingress controller. If you change the App ID service binding, the new secret for App ID that is generated is not used by the Ingress controller. You must restart your Ingress controller pods to pick up the new secret.
+
+**Sample Ingress resource YAML**
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myingress
+  annotations:
+    ingress.bluemix.net/appid-auth: "bindSecret=<bind_secret> namespace=<namespace> requestType=<request_type> serviceName=<myservice> idToken=true"
+spec:
+  tls:
+  - hosts:
+    - mydomain
+    secretName: mytlssecret
+  rules:
+  - host: mydomain
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: myservice
+          servicePort: 8080
+```
+
+|Annotation field|Value|
+|----------------|-----|
+| `bindSecret` | Replace <em>`<bind_secret>`</em> with the Kubernetes secret, which stores the bind secret for your App ID service instance. |
+| `namespace` | Replace <em>`<namespace>`</em> with the namespace of the bind secret. This field defaults to the `default` namespace. |
+| `requestType` | Replace <em>`<request_type>`</em> with the type of request you want to send to App ID. Accepted values are `web` or `api`. The default is `api`. |
+| `serviceName` | Replace <em>`<myservice>`</em> with the name of the Kubernetes service that you created for your app. This field is required. Specify only one service name per service path that you define in the resource file. |
+| `idToken=true` | Optional: The Liberty OIDC client is unable to parse both the access and the identity token at the same time. When working with Liberty, set this value to false so that the identity token is not sent to the Liberty server. |
 
 ## Custom connect-timeouts and read-timeouts (`proxy-connect-timeout`, `proxy-read-timeout`)
 
@@ -599,7 +686,7 @@ Change the default ports for HTTP (port 80) and HTTPS (port 443) network traffic
 
 By default, the Ingress controller is configured to listen for incoming HTTP network traffic on port 80 and for incoming HTTPS network traffic on port 443. You can change the default ports to add security to your Ingress controller domain, or to enable only an HTTPS port.
 
-To enable mutual authentication on a port, see [Opening non-default ports in the Ingress controller](/docs/configurations.md#opening-non-default-ports-in-the-ingress-controller) to configure the Ingress controller to open the valid port, and then specify that port in the `mutual-auth` annotation. Do not use the `custom-port` annotation to specify a port for mutual authentication.
+To enable mutual authentication on a port, see [Opening non-default ports in the Ingress controller](/docs/configurations.md#opening-non-default-ports-in-the-ingress-controller) to configure the Ingress controller to open the valid port, and then specify that port in the [`mutual-auth` annotation](#mutual-authemtication-mutual-auth). Do not use the `custom-port` annotation to specify a port for mutual authentication.
 
 **Sample Ingress resource YAML**
 
@@ -735,7 +822,7 @@ spec:
         backend:
           serviceName: myservice2
           servicePort: 8444
-          ```
+```
 
 |Annotation field|Value|
 |----------------|-----|
@@ -751,7 +838,7 @@ Configure mutual authentication for the Ingress controller.
 
 Configure mutual authentication of downstream traffic for the Ingress controller. The external client authenticates the server and the server also authenticates the client by using certificates. Mutual authentication is also known as certificate-based authentication or two-way authentication.
 
-Use the `mutual-auth` annotation for SSL termination between the client and the Ingress controller. Use the `ssl-services` annotation for SSL termination between the Ingress controller and the back-end app.
+Use the `mutual-auth` annotation for SSL termination between the client and the Ingress controller. Use the [`ssl-services` annotation](#ssl-services-support-ssl-services) for SSL termination between the Ingress controller and the back-end app.
 
 The mutual authentication annotation validates client certificates. To forward client certificates in a header for the applications to handle authorization, you can use the following `proxy-add-headers` annotation: `"ingress.bluemix.net/proxy-add-headers": "serviceName=router-set {\n X-Forwarded-Client-Cert $ssl_client_escaped_cert;\n}\n"`
 
@@ -821,7 +908,7 @@ When your Ingress resource configuration has a TLS section, the Ingress controll
 
 If your back-end app can handle TLS and you want to add additional security, you can add one-way or mutual authentication by providing a certificate that is contained in a secret.
 
-Use the `ssl-services` annotation for SSL termination between the Ingress controller and the back-end app. Use the `mutual-auth` annotation for SSL termination between the client and the Ingress controller.
+Use the `ssl-services` annotation for SSL termination between the Ingress controller and the back-end app. Use the [`mutual-auth` annotation](#mutual-authemtication-mutual-auth) for SSL termination between the client and the Ingress controller.
 
 **Sample Ingress resource YAML**
 
@@ -1341,7 +1428,7 @@ Add extra header information to a client request before sending the request to t
 
 The Ingress controller acts as a proxy between the client app and your back-end app. Client requests that are sent to the Ingress controller are processed (proxied) and put into a new request that is then sent to your back-end app. Similarly, back-end app responses that are sent to the Ingress controller are processed (proxied) and put into a new response that is then sent to the client. Proxying a request or response removes HTTP header information, such as the username, that was initially sent from the client or back-end app.
 
-If your back-end app requires HTTP header information, you can use the `proxy-add-headers` annotation to add header information to the client request before the request is forwarded by the Ingress controller to the back-end app. If the client web app requires HTTP header information, you can use the `response-add-headers` annotation to add header information to the response before the response is forwarded by the Ingress controller to the client web app.<br>
+If your back-end app requires HTTP header information, you can use the [`proxy-add-headers` annotation](#additional-client-request-or-response-header-proxy-add-headers-response-add-headers) to add header information to the client request before the request is forwarded by the Ingress controller to the back-end app. If the client web app requires HTTP header information, you can use the [`response-add-headers` annotation](#additional-client-request-or-response-header-proxy-add-headers-response-add-headers) to add header information to the response before the response is forwarded by the Ingress controller to the client web app.<br>
 
 The `response-add-headers` annotation does not support global headers for all services. To add a header for all service responses at a server level, you can use the `server-snippets` annotation:
 
@@ -1565,90 +1652,3 @@ spec:
 | `key` | Supported values are `location`, `$http_` headers, and `$uri`. To set a global limit for incoming requests based on the zone or service, use `key=location`. To set a global limit for incoming requests based on the header, use `X-USER-ID key=$http_x_user_id`. |
 | `rate` | Replace `<rate>` with the processing rate. To define a rate per second, use r/s: `10r/s`. To define a rate per minute, use r/m: `50r/m`. |
 | `conn` | Replace `<number-of-connections>` with the number of connections. |
-
-## App ID Authentication (`appid-auth`)
-
-Use IBM Cloud App ID to authenticate with your app.
-
-**Description**
-
-Authenticate web or API HTTP/HTTPS requests with App ID.
-
-If you set the request type to web, a web request that contains an App ID access token is validated. If token validation fails, the web request is rejected. If the request does not contain an access token, then the request is redirected to the App ID login page. For App ID web authentication to work, cookies must be enabled in the user's browser.
-
-If you set the request type to api, an API request that contains an App ID access token is validated. If the request does not contain an access token, a 401: Unauthorized error message is returned to the user.
-
-For security reasons, App ID authentication supports only back ends with TLS/SSL enabled.
-
-**Usage**
-
-Because the app uses App ID for authentication, you must provision an App ID instance, configure the instance with valid redirect URIs, and generate a bind secret by binding the instance to your cluster.
-
-1. Choose an existing or create a new App ID instance.
-  * To use an existing instance, ensure that the service instance name doesn't contain spaces. To remove spaces, select the more options menu next to the name of your service instance and select **Rename service**.
-  * To provision a [new App ID instance](https://cloud.ibm.com/catalog/services/app-id):
-      1. Replace the auto-filled **Service name** with your own unique name for the service instance. The service instance name can't contain spaces.
-      2. Choose the same region that your cluster is deployed in.
-      3. Click **Create**.
-
-2. Add redirect URLs for your app. A redirect URL is the callback endpoint of your app. To prevent phishing attacks, IBM Cloud App ID validates the request URL against the allowlist of redirect URLs.
-  1. In the App ID management console, navigate to **Manage Authentication**.
-  2. In the **Identity providers** tab, make sure that you have an Identity Provider selected. If no Identity Provider is selected, the user will not be authenticated but will be issued an access token for anonymous access to the app.
-  3. In the **Authentication settings** tab, add redirect URLs for your app in the format `http://<hostname>/<app_path>/appid_callback` or `https://<hostname>/<app_path>/appid_callback`.
-
-    IBM Cloud App ID offers a logout function: If `/logout` exists in your IBM Cloud App ID path, cookies are removed and the user is sent back to the login page. To use this function, you must append `/appid_logout` to your domain in the format `https://<hostname>/<app_path>/appid_logout` and include this URL in the redirect URLs list.
-
-3. Bind the App ID service instance to your cluster. The command creates a service key for the service instance, or you can include the `--key` flag to use existing service key credentials.
-  ```
-  ibmcloud ks cluster service bind --cluster <cluster_name_or_ID> --namespace <namespace> --service <service_instance_name> [--key <service_instance_key>]
-  ```
-
-  When the service is successfully added to your cluster, a cluster secret is created that holds the credentials of your service instance. Example CLI output:
-  ```
-  ibmcloud ks cluster service bind --cluster mycluster --namespace mynamespace --service appid1
-  Binding service instance to namespace...
-  OK
-  Namespace:    mynamespace
-  Secret name:  binding-<service_instance_name>
-  ```
-
-4. Get the secret that was created in your cluster namespace.
-  ```
-  kubectl get secrets --namespace=<namespace>
-  ```
-
-5. Use the bind secret and the cluster namespace to add the `appid-auth` annotation to your Ingress resource.
-
-When you use the bind secret in the `appid-auth` annotation, the secret is cached by the Ingress controller. If you change the App ID service binding, the new secret for App ID that is generated is not used by the Ingress controller. You must restart your Ingress controller pods to pick up the new secret.
-
-**Sample Ingress resource YAML**
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: myingress
-  annotations:
-    ingress.bluemix.net/appid-auth: "bindSecret=<bind_secret> namespace=<namespace> requestType=<request_type> serviceName=<myservice> idToken=true"
-spec:
-  tls:
-  - hosts:
-    - mydomain
-    secretName: mytlssecret
-  rules:
-  - host: mydomain
-    http:
-      paths:
-      - path: /
-        backend:
-          serviceName: myservice
-          servicePort: 8080
-```
-
-|Annotation field|Value|
-|----------------|-----|
-| `bindSecret` | Replace <em>`<bind_secret>`</em> with the Kubernetes secret, which stores the bind secret for your App ID service instance. |
-| `namespace` | Replace <em>`<namespace>`</em> with the namespace of the bind secret. This field defaults to the `default` namespace. |
-| `requestType` | Replace <em>`<request_type>`</em> with the type of request you want to send to App ID. Accepted values are `web` or `api`. The default is `api`. |
-| `serviceName` | Replace <em>`<myservice>`</em> with the name of the Kubernetes service that you created for your app. This field is required. Specify only one service name per service path that you define in the resource file. |
-| `idToken=true` | Optional: The Liberty OIDC client is unable to parse both the access and the identity token at the same time. When working with Liberty, set this value to false so that the identity token is not sent to the Liberty server. |
